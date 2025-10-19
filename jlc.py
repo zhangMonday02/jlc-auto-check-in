@@ -556,9 +556,15 @@ def ensure_login_page(driver, account_index):
     
     return False
 
-def sign_in_account(username, password, account_index, total_accounts, retry_count=0):
+def sign_in_account(username, password, account_index, total_accounts, retry_count=0, is_final_retry=False):
     """为单个账号执行完整的签到流程（包含重试机制）"""
-    log(f"开始处理账号 {account_index}/{total_accounts}" + (f" (重试)" if retry_count > 0 else ""))
+    retry_label = ""
+    if retry_count > 0:
+        retry_label = f" (重试{retry_count})"
+    if is_final_retry:
+        retry_label = " (最终重试)"
+    
+    log(f"开始处理账号 {account_index}/{total_accounts}{retry_label}")
     
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
@@ -597,7 +603,8 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
         'has_jindou_reward': False,  # 金豆是否有额外奖励
         'token_extracted': False,
         'secretkey_extracted': False,
-        'retry_count': retry_count
+        'retry_count': retry_count,
+        'is_final_retry': is_final_retry
     }
 
     try:
@@ -854,7 +861,8 @@ def process_single_account(username, password, account_index, total_accounts):
         'has_jindou_reward': False,
         'token_extracted': False,
         'secretkey_extracted': False,
-        'retry_count': 0  # 记录最后使用的retry_count
+        'retry_count': 0,  # 记录最后使用的retry_count
+        'is_final_retry': False
     }
     
     merged_success = {'oshwhub': False, 'jindou': False}
@@ -908,6 +916,98 @@ def process_single_account(username, password, account_index, total_accounts):
     
     return merged_result
 
+def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, total_accounts):
+    """对失败的账号执行最终重试"""
+    log("=" * 70)
+    log("🔄 开始执行最终重试 - 处理所有重试后仍失败的账号")
+    log("=" * 70)
+    
+    # 找出需要最终重试的账号
+    failed_accounts = []
+    for i, result in enumerate(all_results):
+        if not result['oshwhub_success'] or not result['jindou_success']:
+            failed_accounts.append({
+                'index': i,
+                'account_index': result['account_index'],
+                'username': usernames[result['account_index'] - 1],
+                'password': passwords[result['account_index'] - 1]
+            })
+    
+    if not failed_accounts:
+        log("✅ 没有需要最终重试的账号，所有账号都已成功")
+        return all_results
+    
+    log(f"📋 需要最终重试的账号: {', '.join(str(acc['account_index']) for acc in failed_accounts)}")
+    
+    # 等待一段时间再开始最终重试
+    wait_time = random.randint(10, 15)
+    log(f"⏳ 等待 {wait_time} 秒后开始最终重试...")
+    time.sleep(wait_time)
+    
+    # 执行最终重试
+    for failed_acc in failed_accounts:
+        log(f"🔄 开始最终重试账号 {failed_acc['account_index']}")
+        
+        # 执行最终重试（只执行一次，不进行内部重试）
+        final_result = sign_in_account(
+            failed_acc['username'], 
+            failed_acc['password'], 
+            failed_acc['account_index'], 
+            total_accounts, 
+            retry_count=failed_acc['account_index'],  # 使用account_index作为重试计数标识
+            is_final_retry=True
+        )
+        
+        # 如果最终重试成功，更新结果
+        if final_result['oshwhub_success'] and final_result['jindou_success']:
+            log(f"🎉 账号 {failed_acc['account_index']} - 最终重试成功！")
+            # 完全替换原结果
+            all_results[failed_acc['index']] = final_result
+        else:
+            # 部分成功的情况，只更新成功的部分
+            original_result = all_results[failed_acc['index']]
+            
+            # 更新开源平台结果
+            if final_result['oshwhub_success'] and not original_result['oshwhub_success']:
+                original_result['oshwhub_success'] = True
+                original_result['oshwhub_status'] = final_result['oshwhub_status']
+                original_result['initial_points'] = final_result['initial_points']
+                original_result['final_points'] = final_result['final_points']
+                original_result['points_reward'] = final_result['points_reward']
+                original_result['reward_results'] = final_result['reward_results']
+                log(f"✅ 账号 {failed_acc['account_index']} - 最终重试中开源平台签到成功")
+            
+            # 更新金豆结果
+            if final_result['jindou_success'] and not original_result['jindou_success']:
+                original_result['jindou_success'] = True
+                original_result['jindou_status'] = final_result['jindou_status']
+                original_result['initial_jindou'] = final_result['initial_jindou']
+                original_result['final_jindou'] = final_result['final_jindou']
+                original_result['jindou_reward'] = final_result['jindou_reward']
+                original_result['has_jindou_reward'] = final_result['has_jindou_reward']
+                log(f"✅ 账号 {failed_acc['account_index']} - 最终重试中金豆签到成功")
+            
+            # 更新其他信息
+            if original_result['nickname'] == '未知' and final_result['nickname'] != '未知':
+                original_result['nickname'] = final_result['nickname']
+            
+            if not original_result['token_extracted'] and final_result['token_extracted']:
+                original_result['token_extracted'] = final_result['token_extracted']
+            
+            if not original_result['secretkey_extracted'] and final_result['secretkey_extracted']:
+                original_result['secretkey_extracted'] = final_result['secretkey_extracted']
+            
+            original_result['is_final_retry'] = True
+        
+        # 如果不是最后一个账号，等待一段时间
+        if failed_acc != failed_accounts[-1]:
+            wait_time = random.randint(5, 8)
+            log(f"⏳ 等待 {wait_time} 秒后处理下一个重试账号...")
+            time.sleep(wait_time)
+    
+    log("✅ 最终重试完成")
+    return all_results
+
 def main():
     if len(sys.argv) < 3:
         print("用法: python jlc.py 账号1,账号2,账号3... 密码1,密码2,密码3... [失败退出标志]")
@@ -933,6 +1033,11 @@ def main():
     total_accounts = len(usernames)
     log(f"开始处理 {total_accounts} 个账号的签到任务")
     
+    # 第一阶段：正常执行所有账号
+    log("=" * 70)
+    log("🚀 第一阶段：正常执行所有账号")
+    log("=" * 70)
+    
     # 存储所有账号的结果
     all_results = []
     
@@ -946,6 +1051,12 @@ def main():
             log(f"等待 {wait_time} 秒后处理下一个账号...")
             time.sleep(wait_time)
     
+    # 第二阶段：检查是否有失败的账号，执行最终重试
+    has_failed_accounts = any(not result['oshwhub_success'] or not result['jindou_success'] for result in all_results)
+    
+    if has_failed_accounts:
+        all_results = execute_final_retry_for_failed_accounts(all_results, usernames, passwords, total_accounts)
+    
     # 输出详细总结
     log("=" * 70)
     log("📊 详细签到任务完成总结")
@@ -955,7 +1066,7 @@ def main():
     jindou_success_count = 0
     total_points_reward = 0
     total_jindou_reward = 0
-    retried_accounts = []
+    retried_accounts = []  # 合并所有重试过的账号，包括最终重试
     
     # 记录失败的账号
     failed_accounts = []
@@ -964,15 +1075,24 @@ def main():
         account_index = result['account_index']
         nickname = result.get('nickname', '未知')
         retry_count = result.get('retry_count', 0)
+        is_final_retry = result.get('is_final_retry', False)
         
-        if retry_count > 0:
+        if retry_count > 0 or is_final_retry:
             retried_accounts.append(account_index)
         
         # 检查是否有失败情况
         if not result['oshwhub_success'] or not result['jindou_success']:
             failed_accounts.append(account_index)
         
-        log(f"账号 {account_index} ({nickname}) 详细结果:" + (f" [重试{retry_count}次]" if retry_count > 0 else ""))
+        retry_label = ""
+        if retry_count > 0 and is_final_retry:
+            retry_label = f" [重试{retry_count}次+最终重试]"
+        elif retry_count > 0:
+            retry_label = f" [重试{retry_count}次]"
+        elif is_final_retry:
+            retry_label = f" [最终重试]"
+        
+        log(f"账号 {account_index} ({nickname}) 详细结果:{retry_label}")
         log(f"  ├── 开源平台: {result['oshwhub_status']}")
         
         # 显示积分变化
@@ -1020,6 +1140,10 @@ def main():
     
     if total_jindou_reward > 0:
         log(f"  ├── 总计获得金豆: +{total_jindou_reward}")
+    
+    # 重试统计（合并）
+    if retried_accounts:
+        log(f"  ├── 重试过的账号: {', '.join(map(str, sorted(set(retried_accounts))))}")
     
     # 计算成功率
     oshwhub_rate = (oshwhub_success_count / total_accounts) * 100
