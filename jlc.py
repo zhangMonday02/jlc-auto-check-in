@@ -948,7 +948,7 @@ def process_single_account(username, password, account_index, total_accounts):
 def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, total_accounts):
     """对失败的账号执行最终重试"""
     log("=" * 70)
-    log("🔄 开始执行最终重试 - 处理所有重试后仍失败的账号")
+    log("🔄 执行最终重试 - 处理所有重试后仍失败的账号")
     log("=" * 70)
     
     # 找出需要最终重试的账号
@@ -1061,11 +1061,6 @@ def main():
     
     total_accounts = len(usernames)
     log(f"开始处理 {total_accounts} 个账号的签到任务")
-    
-    # 第一阶段：正常执行所有账号
-    log("=" * 70)
-    log("🚀 第一阶段：正常执行所有账号")
-    log("=" * 70)
     
     # 存储所有账号的结果
     all_results = []
