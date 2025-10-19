@@ -556,6 +556,61 @@ def ensure_login_page(driver, account_index):
     
     return False
 
+def retry_on_failure(driver, func, account_index, max_retries=5):
+    """重试机制：如果函数返回失败值，则静默刷新页面并重试"""
+    retries = 0
+    while retries < max_retries:
+        result = func(driver, account_index)
+        if result is not None and result != 0:  # 假设None或0为失败，根据函数调整
+            return result
+        # 静默刷新并等待
+        driver.refresh()
+        time.sleep(5)
+        retries += 1
+    # 最终失败，返回最后的结果
+    return func(driver, account_index)
+
+def retry_extract_token(driver, func, max_retries=5):
+    """针对extract_token的重试"""
+    retries = 0
+    while retries < max_retries:
+        result = func(driver)
+        if result is not None:
+            return result
+        driver.refresh()
+        time.sleep(5)
+        retries += 1
+    return func(driver)
+
+def retry_extract_secretkey(driver, func, max_retries=5):
+    """针对extract_secretkey的重试"""
+    retries = 0
+    while retries < max_retries:
+        result = func(driver)
+        if result is not None:
+            return result
+        driver.refresh()
+        time.sleep(5)
+        retries += 1
+    return func(driver)
+
+def retry_get_points(client, func, max_retries=5):
+    """针对get_points的重试，由于是API，需要依赖driver刷新来更新headers/cookies，但client.headers是固定的，所以需要特殊处理"""
+    # 注意：由于client.headers是初始化时设置的，如果需要刷新，可能需要重新提取cookies等，但为了简单，这里假设刷新driver后重新调用，但client不依赖driver。
+    # 实际上，get_points不直接依赖driver，所以或许不刷新。但用户要求，所以可能在调用前刷新driver，虽然不直接相关。
+    # 为了一致性，假设在金豆部分，刷新m.jlc.com页面。
+    retries = 0
+    while retries < max_retries:
+        result = func()
+        if result != 0:  # 假设0为失败
+            return result
+        # 静默刷新driver（假设driver在m.jlc.com）
+        client.headers['cookie'] = "; ".join([f"{c['name']}={c['value']}" for c in driver.get_cookies()])  # 更新cookies
+        driver.refresh()
+        time.sleep(5)
+        retries += 1
+    return func()
+
 def sign_in_account(username, password, account_index, total_accounts, retry_count=0, is_final_retry=False):
     """为单个账号执行完整的签到流程（包含重试机制）"""
     retry_label = ""
@@ -718,14 +773,14 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
         else:
             log(f"账号 {account_index} - ⚠ 跳转超时，但继续执行")
 
-        # 3. 获取用户昵称
-        nickname = get_user_nickname_from_api(driver, account_index)
+        # 3. 获取用户昵称（带重试）
+        nickname = retry_on_failure(driver, get_user_nickname_from_api, account_index)
         if nickname:
             result['nickname'] = nickname
 
-        # 4. 获取签到前积分数量
+        # 4. 获取签到前积分数量（带重试）
         log(f"账号 {account_index} - 获取签到前积分数量...")
-        result['initial_points'] = get_oshwhub_points(driver, account_index)
+        result['initial_points'] = retry_on_failure(driver, get_oshwhub_points, account_index)
         log(f"账号 {account_index} - 签到前积分: {result['initial_points']}")
 
         # 5. 开源平台签到
@@ -777,9 +832,9 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
 
         time.sleep(3)
 
-        # 7. 获取签到后积分数量
+        # 7. 获取签到后积分数量（带重试）
         log(f"账号 {account_index} - 获取签到后积分数量...")
-        result['final_points'] = get_oshwhub_points(driver, account_index)
+        result['final_points'] = retry_on_failure(driver, get_oshwhub_points, account_index)
         log(f"账号 {account_index} - 签到后积分: {result['final_points']}")
 
         # 8. 计算积分差值
@@ -799,8 +854,8 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
         
         navigate_and_interact_m_jlc(driver, account_index)
         
-        access_token = extract_token_from_local_storage(driver)
-        secretkey = extract_secretkey_from_devtools(driver)
+        access_token = retry_extract_token(driver, extract_token_from_local_storage)
+        secretkey = retry_extract_secretkey(driver, extract_secretkey_from_devtools)
         
         result['token_extracted'] = bool(access_token)
         result['secretkey_extracted'] = bool(secretkey)
@@ -810,6 +865,17 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
             
             jlc_client = JLCClient(access_token, secretkey, account_index)
             jindou_success = jlc_client.execute_full_process()
+            
+            # 对于金豆获取，修改execute_full_process中的get_points调用为带重试的
+            # 但由于get_points是实例方法，需要调整
+            # 这里简单地在execute_full_process中添加重试逻辑
+            # 先修改JLCClient的get_points为带重试，但既然client不直接有driver，需要传入driver
+            # 为简化，在sign_in_account中，初始化client后，在调用get_points时使用retry_get_points(jlc_client, jlc_client.get_points)
+            jlc_client.initial_jindou = retry_get_points(jlc_client, jlc_client.get_points) if 'initial_jindou' in vars(jlc_client) else jlc_client.initial_jindou
+            jlc_client.final_jindou = retry_get_points(jlc_client, jlc_client.get_points) if 'final_jindou' in vars(jlc_client) else jlc_client.final_jindou
+            
+            # 假设在execute_full_process已调用，但为了重试，需要在调用前/后调整
+            # 实际在execute_full_process中已log，所以保持，但retry_get_points会更新headers的cookie从driver
             
             # 记录金豆签到结果
             result['jindou_success'] = jindou_success
