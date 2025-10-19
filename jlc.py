@@ -940,7 +940,7 @@ def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, t
     log(f"📋 需要最终重试的账号: {', '.join(str(acc['account_index']) for acc in failed_accounts)}")
     
     # 等待一段时间再开始最终重试
-    wait_time = random.randint(10, 15)
+    wait_time = random.randint(3, 5)
     log(f"⏳ 等待 {wait_time} 秒后开始最终重试...")
     time.sleep(wait_time)
     
@@ -948,7 +948,7 @@ def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, t
     for failed_acc in failed_accounts:
         log(f"🔄 开始最终重试账号 {failed_acc['account_index']}")
         
-        # 执行最终重试（只执行一次，不进行内部重试）
+        # 执行最终重试（只执行一次）
         final_result = sign_in_account(
             failed_acc['username'], 
             failed_acc['password'], 
@@ -960,7 +960,7 @@ def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, t
         
         # 如果最终重试成功，更新结果
         if final_result['oshwhub_success'] and final_result['jindou_success']:
-            log(f"🎉 账号 {failed_acc['account_index']} - 最终重试成功！")
+            log(f"🎉 账号 {failed_acc['account_index']} - 重试成功！")
             # 完全替换原结果
             all_results[failed_acc['index']] = final_result
         else:
@@ -975,7 +975,7 @@ def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, t
                 original_result['final_points'] = final_result['final_points']
                 original_result['points_reward'] = final_result['points_reward']
                 original_result['reward_results'] = final_result['reward_results']
-                log(f"✅ 账号 {failed_acc['account_index']} - 最终重试中开源平台签到成功")
+                log(f"✅ 账号 {failed_acc['account_index']} - 开源平台签到成功")
             
             # 更新金豆结果
             if final_result['jindou_success'] and not original_result['jindou_success']:
@@ -985,7 +985,7 @@ def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, t
                 original_result['final_jindou'] = final_result['final_jindou']
                 original_result['jindou_reward'] = final_result['jindou_reward']
                 original_result['has_jindou_reward'] = final_result['has_jindou_reward']
-                log(f"✅ 账号 {failed_acc['account_index']} - 最终重试中金豆签到成功")
+                log(f"✅ 账号 {failed_acc['account_index']} - 金豆签到成功")
             
             # 更新其他信息
             if original_result['nickname'] == '未知' and final_result['nickname'] != '未知':
@@ -1001,7 +1001,7 @@ def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, t
         
         # 如果不是最后一个账号，等待一段时间
         if failed_acc != failed_accounts[-1]:
-            wait_time = random.randint(5, 8)
+            wait_time = random.randint(3, 5)
             log(f"⏳ 等待 {wait_time} 秒后处理下一个重试账号...")
             time.sleep(wait_time)
     
