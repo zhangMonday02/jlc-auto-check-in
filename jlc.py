@@ -581,6 +581,30 @@ def ensure_login_page(driver, account_index):
     
     return False
 
+def check_login_success(driver, account_index, max_wait=25):
+    """检查登录是否成功，返回布尔值表示是否成功"""
+    log(f"账号 {account_index} - 等待登录跳转...")
+    
+    for i in range(max_wait):
+        current_url = driver.current_url
+        
+        # 检查是否成功跳转回签到页面
+        if "oshwhub.com" in current_url and "passport.jlc.com" not in current_url:
+            log(f"账号 {account_index} - ✅ 成功跳转回签到页面")
+            return True
+        
+        # 检查是否仍在登录页面或认证页面
+        if "passport.jlc.com" in current_url:
+            log(f"账号 {account_index} - ⏳ 仍在登录/认证页面，等待跳转... ({i+1}/{max_wait})")
+        else:
+            log(f"账号 {account_index} - ⏳ 当前页面: {current_url}，等待跳转... ({i+1}/{max_wait})")
+        
+        time.sleep(2)
+    
+    # 超时未跳转
+    log(f"账号 {account_index} - ❌ 登录后跳转超时，未成功返回签到页面")
+    return False
+
 def sign_in_account(username, password, account_index, total_accounts, retry_count=0, is_final_retry=False):
     """为单个账号执行完整的签到流程（包含重试机制）"""
     retry_label = ""
@@ -728,35 +752,26 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
         except Exception as e:
             log(f"账号 {account_index} - 滑块验证处理: {e}")
 
-        # 等待跳转
-        log(f"账号 {account_index} - 等待登录跳转...")
-        max_wait = 25
-        for i in range(max_wait):
-            current_url = driver.current_url
-            
-            # 检查是否成功跳转回签到页面
-            if "oshwhub.com" in current_url and "passport.jlc.com" not in current_url:
-                log(f"账号 {account_index} - 成功跳转回签到页面")
-                break
-            
-            time.sleep(2)
-        else:
-            log(f"账号 {account_index} - ⚠ 跳转超时，但继续执行")
+        # 3. 检查登录是否成功（关键修改：如果没有成功跳转，直接视为失败）
+        if not check_login_success(driver, account_index):
+            log(f"账号 {account_index} - ❌ 登录后未成功跳转回签到页面，视为登录失败")
+            result['oshwhub_status'] = '登录跳转失败'
+            return result
 
-        # 3. 获取用户昵称
+        # 4. 获取用户昵称
         nickname = get_user_nickname_from_api(driver, account_index)
         if nickname:
             result['nickname'] = nickname
         else:
             result['nickname'] = '未知'
 
-        # 4. 获取签到前积分数量
+        # 5. 获取签到前积分数量
         log(f"账号 {account_index} - 获取签到前积分数量...")
         initial_points = get_oshwhub_points(driver, account_index)
         result['initial_points'] = initial_points if initial_points is not None else 0
         log(f"账号 {account_index} - 签到前积分: {result['initial_points']}")
 
-        # 5. 开源平台签到
+        # 6. 开源平台签到
         log(f"账号 {account_index} - 等待签到页加载...")
         time.sleep(5)
 
@@ -792,7 +807,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
                     # 等待签到完成
                     time.sleep(2)
                     
-                    # 6. 签到完成后点击7天好礼和月度好礼
+                    # 7. 签到完成后点击7天好礼和月度好礼
                     result['reward_results'] = click_gift_buttons(driver, account_index)
                     
                 except Exception as e:
@@ -805,22 +820,22 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
 
         time.sleep(3)
 
-        # 7. 获取签到后积分数量
+        # 8. 获取签到后积分数量
         log(f"账号 {account_index} - 获取签到后积分数量...")
         final_points = get_oshwhub_points(driver, account_index)
         result['final_points'] = final_points if final_points is not None else 0
         log(f"账号 {account_index} - 签到后积分: {result['final_points']}")
 
-        # 8. 计算积分差值
+        # 9. 计算积分差值
         result['points_reward'] = result['final_points'] - result['initial_points']
         if result['points_reward'] > 0:
             log(f"账号 {account_index} - 🎉 总积分增加: {result['initial_points']} → {result['final_points']} (+{result['points_reward']})")
-        elif result['points_reward'] == 0:
+        elif result['points_reward'] == 0 and result['initial_points'] > 0:
             log(f"账号 {account_index} - ⚠ 总积分无变化，可能今天已签到过: {result['initial_points']} → {result['final_points']} (0)")
         else:
             log(f"账号 {account_index} - ❗ 积分减少: {result['initial_points']} → {result['final_points']} ({result['points_reward']})")
 
-        # 9. 金豆签到流程
+        # 10. 金豆签到流程
         log(f"账号 {account_index} - 开始金豆签到流程...")
         driver.get("https://m.jlc.com/")
         log(f"账号 {account_index} - 已访问 m.jlc.com，等待页面加载...")
@@ -890,14 +905,16 @@ def process_single_account(username, password, account_index, total_accounts):
         'has_jindou_reward': False,
         'token_extracted': False,
         'secretkey_extracted': False,
-        'retry_count': 0,  # 记录最后使用的retry_count
+        'retry_count': 0,  # 记录实际重试次数
         'is_final_retry': False
     }
     
     merged_success = {'oshwhub': False, 'jindou': False}
 
     for attempt in range(max_retries + 1):  # 第一次执行 + 重试次数
-        result = sign_in_account(username, password, account_index, total_accounts, retry_count=attempt)
+        # 实际重试次数 = attempt（第一次执行时attempt=0，不算重试）
+        actual_retry_count = attempt
+        result = sign_in_account(username, password, account_index, total_accounts, retry_count=actual_retry_count)
         
         # 合并开源平台结果：如果本次成功且之前未成功，则更新
         if result['oshwhub_success'] and not merged_success['oshwhub']:
@@ -929,8 +946,8 @@ def process_single_account(username, password, account_index, total_accounts):
         if not merged_result['secretkey_extracted'] and result['secretkey_extracted']:
             merged_result['secretkey_extracted'] = result['secretkey_extracted']
         
-        # 更新retry_count为最后一次尝试的
-        merged_result['retry_count'] = result['retry_count']
+        # 更新retry_count为实际重试次数
+        merged_result['retry_count'] = actual_retry_count
         
         # 检查是否还需要重试
         if not should_retry(merged_success) or attempt >= max_retries:
@@ -983,7 +1000,7 @@ def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, t
             failed_acc['password'], 
             failed_acc['account_index'], 
             total_accounts, 
-            retry_count=failed_acc['account_index'],  # 使用account_index作为重试计数标识
+            retry_count=3,
             is_final_retry=True
         )
         
@@ -1027,6 +1044,8 @@ def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, t
                 original_result['secretkey_extracted'] = final_result['secretkey_extracted']
             
             original_result['is_final_retry'] = True
+            # 更新重试次数为3（最终重试）
+            original_result['retry_count'] = 3
         
         # 如果不是最后一个账号，等待一段时间
         if failed_acc != failed_accounts[-1]:
@@ -1108,13 +1127,12 @@ def main():
         if not result['oshwhub_success'] or not result['jindou_success']:
             failed_accounts.append(account_index)
         
+        # 修复重试次数显示逻辑
         retry_label = ""
-        if retry_count > 0 and is_final_retry:
-            retry_label = f" [重试{retry_count}次+最终重试]"
+        if is_final_retry:
+            retry_label = " [最终重试]"
         elif retry_count > 0:
             retry_label = f" [重试{retry_count}次]"
-        elif is_final_retry:
-            retry_label = f" [最终重试]"
         
         log(f"账号 {account_index} ({nickname}) 详细结果:{retry_label}")
         log(f"  ├── 开源平台: {result['oshwhub_status']}")
@@ -1164,10 +1182,6 @@ def main():
     
     if total_jindou_reward > 0:
         log(f"  ├── 总计获得金豆: +{total_jindou_reward}")
-    
-    # 重试统计（合并）
-    if retried_accounts:
-        log(f"  ├── 重试过的账号: {', '.join(map(str, sorted(set(retried_accounts))))}")
     
     # 计算成功率
     oshwhub_rate = (oshwhub_success_count / total_accounts) * 100
