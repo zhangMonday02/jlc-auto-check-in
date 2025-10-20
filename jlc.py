@@ -45,7 +45,7 @@ def with_retry(func, max_retries=5, delay=1):
 
 @with_retry
 def extract_token_from_local_storage(driver):
-    """直接从 localStorage 提取 X-JLC-AccessToken"""
+    """从 localStorage 提取 X-JLC-AccessToken"""
     try:
         token = driver.execute_script("return window.localStorage.getItem('X-JLC-AccessToken');")
         if token:
@@ -261,7 +261,7 @@ class JLCClient:
                 
                 # 领取奖励
                 if self.receive_voucher():
-                    # 领取奖励成功后，直接视为签到完成，不再重新签到
+                    # 领取奖励成功后，视为签到完成
                     log(f"账号 {self.account_index} - ✅ 奖励领取成功，签到完成")
                     self.sign_status = "领取奖励成功"
                     return True
@@ -304,8 +304,8 @@ class JLCClient:
         return self.jindou_reward
     
     def execute_full_process(self):
-        """执行完整的金豆签到流程"""
-        log(f"账号 {self.account_index} - 开始完整金豆签到流程")
+        """执行金豆签到流程"""
+        log(f"账号 {self.account_index} - 开始金豆签到流程")
         
         # 1. 获取用户信息
         if not self.get_user_info():
@@ -700,11 +700,18 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
             
             actions = ActionChains(driver)
             actions.click_and_hold(slider).perform()
-            time.sleep(0.5)  # 保留最小hold延迟
+            time.sleep(0.5)
             
-            # 优化拖动: 一次性偏移，添加随机Y抖动模拟人类
-            y_offset = random.choice([1, -1, 0])  # 随机小抖动
-            actions.drag_and_drop_by_offset(slider, move_distance, y_offset).perform()
+            quick_distance = int(move_distance * random.uniform(0.6, 0.8))
+            slow_distance = move_distance - quick_distance
+            
+            y_offset1 = random.randint(-2, 2)
+            actions.move_by_offset(quick_distance, y_offset1).perform()
+            time.sleep(random.uniform(0.1, 0.3))
+            
+            y_offset2 = random.randint(-2, 2)
+            actions.move_by_offset(slow_distance, y_offset2).perform()
+            time.sleep(random.uniform(0.05, 0.15))
             
             actions.release().perform()
             log(f"账号 {account_index} - 滑块拖动完成")
@@ -726,7 +733,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
                 jumped = True
                 break
             
-            time.sleep(1)  # 优化为1秒间隔
+            time.sleep(1)
         
         if not jumped:
             current_title = driver.title
@@ -735,7 +742,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
             return result
 
         # 3. 获取用户昵称
-        time.sleep(1)  # 额外等待一秒，避免昵称重试
+        time.sleep(1)
         nickname = get_user_nickname_from_api(driver, account_index)
         if nickname:
             result['nickname'] = nickname
@@ -873,7 +880,7 @@ def process_single_account(username, password, account_index, total_accounts):
         'initial_points': 0,
         'final_points': 0,
         'points_reward': 0,
-        'reward_results': [],     # 礼包领取结果
+        'reward_results': [],
         'jindou_status': '未知',
         'jindou_success': False,
         'initial_jindou': 0,
@@ -962,7 +969,7 @@ def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, t
     log(f"📋 需要最终重试的账号: {', '.join(str(acc['account_index']) for acc in failed_accounts)}")
     
     # 等待一段时间再开始最终重试
-    wait_time = random.randint(3, 5)
+    wait_time = random.randint(2, 3)
     log(f"⏳ 等待 {wait_time} 秒后开始最终重试...")
     time.sleep(wait_time)
     
@@ -1069,7 +1076,7 @@ def main():
             log(f"等待 {wait_time} 秒后处理下一个账号...")
             time.sleep(wait_time)
     
-    # 第二阶段：检查是否有失败的账号，执行最终重试
+    # 检查是否有失败的账号，执行最终重试
     has_failed_accounts = any(not result['oshwhub_success'] or not result['jindou_success'] for result in all_results)
     
     if has_failed_accounts:
