@@ -730,32 +730,29 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
         except:
             pass
 
+        # 开源平台签到 - 修复语法错误
         try:
-            signed_element = driver.find_element(By.XPATH, '//span[contains(text(),"已签到")]')
-            log(f"账号 {account_index} - ✅ 今天已经在开源平台签到过了！")
-            result['oshwhub_status'] = '已签到过'
-            result['oshwhub_success'] = True
-            
-            result['reward_results'] = click_gift_buttons(driver, account_index)
-            
-        except:
             try:
-                sign_btn = wait.until(
-                    EC.element_to_be_clickable((By.XPATH, '//span[contains(text(),"立即签到")]'))
-                )
-                sign_btn.click()
-                log(f"账号 {account_index} - ✅ 开源平台签到成功！")
-                result['oshwhub_status'] = '签到成功'
+                signed_element = driver.find_element(By.XPATH, '//span[contains(text(),"已签到")]')
+                log(f"账号 {account_index} - ✅ 今天已经在开源平台签到过了！")
+                result['oshwhub_status'] = '已签到过'
                 result['oshwhub_success'] = True
-                
-                WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-                
                 result['reward_results'] = click_gift_buttons(driver, account_index)
-                
-            except Exception as e:
-                log(f"账号 {account_index} - ❌ 开源平台签到失败，未找到签到按钮: {e}")
-                result['oshwhub_status'] = '签到失败'
+            except:
+                try:
+                    sign_btn = wait.until(
+                        EC.element_to_be_clickable((By.XPATH, '//span[contains(text(),"立即签到")]'))
+                    )
+                    sign_btn.click()
+                    log(f"账号 {account_index} - ✅ 开源平台签到成功！")
+                    result['oshwhub_status'] = '签到成功'
+                    result['oshwhub_success'] = True
                     
+                    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+                    result['reward_results'] = click_gift_buttons(driver, account_index)
+                except Exception as e:
+                    log(f"账号 {account_index} - ❌ 开源平台签到失败，未找到签到按钮: {e}")
+                    result['oshwhub_status'] = '签到失败'
         except Exception as e:
             log(f"账号 {account_index} - ❌ 开源平台签到异常: {e}")
             result['oshwhub_status'] = '签到异常'
