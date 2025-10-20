@@ -906,7 +906,6 @@ def process_single_account(username, password, account_index, total_accounts):
             merged_result['final_points'] = result['final_points']
             merged_result['points_reward'] = result['points_reward']
             merged_result['reward_results'] = result['reward_results']  # 合并礼包结果
-            log(f"账号 {account_index} - 正在处理开源平台签到成功结果")
         
         # 合并金豆结果：如果本次成功且之前未成功，则更新
         if result['jindou_success'] and not merged_success['jindou']:
@@ -916,7 +915,6 @@ def process_single_account(username, password, account_index, total_accounts):
             merged_result['final_jindou'] = result['final_jindou']
             merged_result['jindou_reward'] = result['jindou_reward']
             merged_result['has_jindou_reward'] = result['has_jindou_reward']
-            log(f"账号 {account_index} - 正在处理金豆签到成功结果")
         
         # 更新其他字段（如果之前未知）
         if merged_result['nickname'] == '未知' and result['nickname'] != '未知':
