@@ -359,7 +359,7 @@ def navigate_and_interact_m_jlc(driver, account_index):
     try:
         WebDriverWait(driver, 12).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
         driver.execute_script("window.scrollTo(0, 300);")
-        time.sleep(2)
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))  # 替换 time.sleep(2)
         
         nav_selectors = [
             "//div[contains(text(), '我的')]",
@@ -374,15 +374,15 @@ def navigate_and_interact_m_jlc(driver, account_index):
                 element = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.XPATH, selector)))
                 element.click()
                 log(f"账号 {account_index} - 点击导航元素: {selector}")
-                time.sleep(2)
+                WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))  # 替换 time.sleep(2)
                 break
             except:
                 continue
         
         driver.execute_script("window.scrollTo(0, 500);")
-        time.sleep(2)
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))  # 新增等待
         driver.refresh()
-        time.sleep(5)
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))  # 替换 time.sleep(5)
         
     except Exception as e:
         log(f"账号 {account_index} - 交互操作出错: {e}")
@@ -420,8 +420,7 @@ def click_gift_buttons(driver, account_index):
         return reward_results
 
     try:
-        # 等待一秒
-        time.sleep(1)
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))  # 替换 time.sleep(1)
         
         log(f"账号 {account_index} - 开始点击礼包按钮...")
         
@@ -435,8 +434,7 @@ def click_gift_buttons(driver, account_index):
                 seven_day_gift.click()
                 log(f"账号 {account_index} - ✅ 检测到今天是周日，成功点击7天好礼，祝你周末愉快~")
                 
-                # 等待1秒并抓取奖励信息
-                time.sleep(1)
+                WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))  # 替换 time.sleep(1)
                 reward_result = capture_reward_info(driver, account_index, "7天")
                 if reward_result:
                     reward_results.append(reward_result)
@@ -444,7 +442,7 @@ def click_gift_buttons(driver, account_index):
                 # 如果也是月底，刷新页面
                 if last_day:
                     driver.refresh()
-                    time.sleep(5)
+                    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))  # 替换 time.sleep(5)
                 
             except Exception as e:
                 log(f"账号 {account_index} - ⚠ 无法点击7天好礼: {e}")
@@ -456,8 +454,7 @@ def click_gift_buttons(driver, account_index):
                 monthly_gift.click()
                 log(f"账号 {account_index} - ✅ 检测到今天是月底，成功点击月度好礼")          
                 
-                # 等待1秒并抓取奖励信息
-                time.sleep(1)
+                WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))  # 替换 time.sleep(1)
                 reward_result = capture_reward_info(driver, account_index, "月度")
                 if reward_result:
                     reward_results.append(reward_result)
@@ -511,7 +508,7 @@ def ensure_login_page(driver, account_index):
             driver.get("https://oshwhub.com/sign_in")
             log(f"账号 {account_index} - 已打开 JLC 签到页")
             
-            time.sleep(5 + random.randint(2, 3))
+            WebDriverWait(driver, 10).until(lambda d: "passport.jlc.com/login" in d.current_url)  # 替换 time.sleep(5 + random)
             current_url = driver.current_url
 
             # 检查是否在登录页面
@@ -533,6 +530,7 @@ def ensure_login_page(driver, account_index):
                     chrome_options.add_argument("--window-size=1920,1080")
                     chrome_options.add_argument(f"--user-data-dir={tempfile.mkdtemp()}")
                     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+                    chrome_options.add_argument("--blink-settings=imagesEnabled=false")  # 禁用图像
                     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
                     chrome_options.add_experimental_option('useAutomationExtension', False)
 
@@ -565,6 +563,7 @@ def ensure_login_page(driver, account_index):
                 chrome_options.add_argument("--window-size=1920,1080")
                 chrome_options.add_argument(f"--user-data-dir={tempfile.mkdtemp()}")
                 chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+                chrome_options.add_argument("--blink-settings=imagesEnabled=false")  # 禁用图像
                 chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
                 chrome_options.add_experimental_option('useAutomationExtension', False)
 
@@ -599,6 +598,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
     chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument(f"--user-data-dir={tempfile.mkdtemp()}")
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_argument("--blink-settings=imagesEnabled=false")  # 禁用图像加载
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
 
@@ -649,7 +649,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
             )
             phone_btn.click()
             log(f"账号 {account_index} - 已切换账号登录")
-            time.sleep(2)
+            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, '//input[@placeholder="请输入手机号码 / 客户编号 / 邮箱"]')))  # 替换 time.sleep(2)
         except Exception as e:
             log(f"账号 {account_index} - 账号登录按钮可能已默认选中: {e}")
 
@@ -685,7 +685,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
             return result
 
         # 处理滑块验证
-        time.sleep(5)
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, ".btn_slide")))  # 替换 time.sleep(5) before slider
         try:
             slider = wait.until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, ".btn_slide"))
@@ -703,34 +703,22 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
             
             actions = ActionChains(driver)
             actions.click_and_hold(slider).perform()
-            time.sleep(0.5)
+            time.sleep(0.5)  # 保留最小hold延迟
             
-            # 分段滑动
-            quick_steps = int(move_distance * 0.7)
-            for i in range(quick_steps):
-                if i % 10 == 0:
-                    time.sleep(0.01)
-                actions.move_by_offset(1, 0).perform()
-            
-            time.sleep(0.2)
-            
-            slow_steps = move_distance - quick_steps
-            for i in range(slow_steps):
-                if i % 3 == 0:
-                    time.sleep(0.02)
-                y_offset = 1 if i % 2 == 0 else -1 if i % 5 == 0 else 0
-                actions.move_by_offset(1, y_offset).perform()
+            # 优化拖动: 一次性偏移，添加随机Y抖动模拟人类
+            y_offset = random.choice([1, -1, 0])  # 随机小抖动
+            actions.drag_and_drop_by_offset(slider, move_distance, y_offset).perform()
             
             actions.release().perform()
             log(f"账号 {account_index} - 滑块拖动完成")
-            time.sleep(5)
+            WebDriverWait(driver, 10).until(lambda d: "oshwhub.com" in d.current_url and "passport.jlc.com" not in d.current_url)  # 替换 time.sleep(5) after
             
         except Exception as e:
             log(f"账号 {account_index} - 滑块验证处理: {e}")
 
         # 等待跳转
         log(f"账号 {account_index} - 等待登录跳转...")
-        max_wait = 25
+        max_wait = 15  # 减少到15次
         jumped = False
         for i in range(max_wait):
             current_url = driver.current_url
@@ -741,7 +729,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
                 jumped = True
                 break
             
-            time.sleep(2)
+            time.sleep(1)  # 优化为1秒间隔
         
         if not jumped:
             current_title = driver.title
@@ -764,11 +752,11 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
 
         # 5. 开源平台签到
         log(f"账号 {account_index} - 等待签到页加载...")
-        time.sleep(5)
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))  # 替换 time.sleep(5)
 
         try:
             driver.refresh()
-            time.sleep(4)
+            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))  # 替换 time.sleep(4)
         except:
             pass
 
@@ -796,7 +784,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
                     result['oshwhub_success'] = True
                     
                     # 等待签到完成
-                    time.sleep(2)
+                    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))  # 替换 time.sleep(2)
                     
                     # 6. 签到完成后点击7天好礼和月度好礼
                     result['reward_results'] = click_gift_buttons(driver, account_index)
@@ -809,7 +797,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
             log(f"账号 {account_index} - ❌ 开源平台签到异常: {e}")
             result['oshwhub_status'] = '签到异常'
 
-        time.sleep(3)
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))  # 替换 time.sleep(3)
 
         # 7. 获取签到后积分数量
         log(f"账号 {account_index} - 获取签到后积分数量...")
@@ -830,7 +818,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
         log(f"账号 {account_index} - 开始金豆签到流程...")
         driver.get("https://m.jlc.com/")
         log(f"账号 {account_index} - 已访问 m.jlc.com，等待页面加载...")
-        time.sleep(10)
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))  # 替换 time.sleep(10)
         
         navigate_and_interact_m_jlc(driver, account_index)
         
