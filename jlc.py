@@ -735,7 +735,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
             return result
 
         # 3. 获取用户昵称
-        time.sleep(10)
+        time.sleep(1)
         nickname = get_user_nickname_from_api(driver, account_index)
         if nickname:
             result['nickname'] = nickname
@@ -756,7 +756,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
             WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
         except:
             pass
-
+        time.sleep(8)
         # 执行开源平台签到
         try:
             # 先检查是否已经签到
