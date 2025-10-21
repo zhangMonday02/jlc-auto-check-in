@@ -735,7 +735,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
             return result
 
         # 3. 获取用户昵称
-        time.sleep(1)
+        time.sleep(5)
         nickname = get_user_nickname_from_api(driver, account_index)
         if nickname:
             result['nickname'] = nickname
