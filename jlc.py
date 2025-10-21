@@ -715,7 +715,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
 
         # 等待跳转
         log(f"账号 {account_index} - 等待登录跳转...")
-        max_wait = 15  # 减少到15次
+        max_wait = 15
         jumped = False
         for i in range(max_wait):
             current_url = driver.current_url
@@ -735,7 +735,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
             return result
 
         # 3. 获取用户昵称
-        time.sleep(5)
+        time.sleep(10)
         nickname = get_user_nickname_from_api(driver, account_index)
         if nickname:
             result['nickname'] = nickname
