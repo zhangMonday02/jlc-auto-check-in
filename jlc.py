@@ -143,7 +143,6 @@ def get_oshwhub_points(driver, account_index):
             data = response.json()
             if data and data.get('success'):
                 points = data.get('result', {}).get('points', 0)
-                log(f"账号 {account_index} - 📊 当前积分: {points}")
                 return points
         
         log(f"账号 {account_index} - ⚠ 无法获取积分信息")
@@ -207,13 +206,11 @@ class JLCClient:
     @with_retry
     def get_points(self):
         """获取金豆数量"""
-        log(f"账号 {self.account_index} - 获取金豆数量...")
         url = f"{self.base_url}/api/activity/front/getCustomerIntegral"
         data = self.send_request(url)
         
         if data and data.get('success'):
             jindou_count = data.get('data', {}).get('integralVoucher', 0)
-            log(f"账号 {self.account_index} - 当前金豆: {jindou_count}")
             return jindou_count
         else:
             log(f"账号 {self.account_index} - ❌ 获取金豆数量失败")
@@ -304,9 +301,7 @@ class JLCClient:
         return self.jindou_reward
     
     def execute_full_process(self):
-        """执行金豆签到流程"""
-        log(f"账号 {self.account_index} - 开始金豆签到流程")
-        
+        """执行金豆签到流程"""        
         # 1. 获取用户信息
         if not self.get_user_info():
             return False
@@ -314,11 +309,10 @@ class JLCClient:
         time.sleep(random.randint(1, 2))
         
         # 2. 获取签到前金豆数量
-        log(f"账号 {self.account_index} - 获取签到前金豆数量...")
         self.initial_jindou = self.get_points()
         if self.initial_jindou is None:
             self.initial_jindou = 0
-        log(f"账号 {self.account_index} - 签到前金豆: {self.initial_jindou}")
+        log(f"账号 {self.account_index} - 签到前金豆💰: {self.initial_jindou}")
         
         time.sleep(random.randint(1, 2))
         
@@ -338,11 +332,10 @@ class JLCClient:
         time.sleep(random.randint(1, 2))
         
         # 5. 获取签到后金豆数量
-        log(f"账号 {self.account_index} - 获取签到后金豆数量...")
         self.final_jindou = self.get_points()
         if self.final_jindou is None:
             self.final_jindou = 0
-        log(f"账号 {self.account_index} - 签到后金豆: {self.final_jindou}")
+        log(f"账号 {self.account_index} - 签到后金豆💰: {self.final_jindou}")
         
         # 6. 计算金豆差值
         self.calculate_jindou_difference()
@@ -750,13 +743,12 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
             result['nickname'] = '未知'
 
         # 4. 获取签到前积分数量
-        log(f"账号 {account_index} - 获取签到前积分数量...")
         initial_points = get_oshwhub_points(driver, account_index)
         result['initial_points'] = initial_points if initial_points is not None else 0
-        log(f"账号 {account_index} - 签到前积分: {result['initial_points']}")
+        log(f"账号 {account_index} - 签到前积分💰: {result['initial_points']}")
 
         # 5. 开源平台签到
-        log(f"账号 {account_index} - 等待签到页加载...")
+        log(f"账号 {account_index} - 正在签到中...")
         WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
         try:
@@ -805,10 +797,9 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
         WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
         # 7. 获取签到后积分数量
-        log(f"账号 {account_index} - 获取签到后积分数量...")
         final_points = get_oshwhub_points(driver, account_index)
         result['final_points'] = final_points if final_points is not None else 0
-        log(f"账号 {account_index} - 签到后积分: {result['final_points']}")
+        log(f"账号 {account_index} - 签到后积分💰: {result['final_points']}")
 
         # 8. 计算积分差值
         result['points_reward'] = result['final_points'] - result['initial_points']
@@ -1108,12 +1099,10 @@ def main():
             failed_accounts.append(account_index)
         
         retry_label = ""
-        if retry_count > 0 and is_final_retry:
-            retry_label = f" [重试{retry_count}次+最终重试]"
-        elif retry_count > 0:
-            retry_label = f" [重试{retry_count}次]"
+        if retry_count > 0:
+             retry_label = f" [重试{retry_count}次]"
         elif is_final_retry:
-            retry_label = f" [最终重试]"
+            retry_label = " [最终重试]"
         
         log(f"账号 {account_index} ({nickname}) 详细结果:{retry_label}")
         log(f"  ├── 开源平台: {result['oshwhub_status']}")
@@ -1195,7 +1184,7 @@ def main():
         if enable_failure_exit:
             log("✅ 所有账号签到成功，程序正常退出")
         else:
-            log("✅ 程序正常退出（失败退出未开启）")
+            log("✅ 程序正常退出")
         sys.exit(0)
 
 if __name__ == "__main__":
