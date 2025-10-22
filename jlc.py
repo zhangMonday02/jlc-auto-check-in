@@ -756,7 +756,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
             WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
         except:
             pass
-        time.sleep(8)
+        time.sleep(6)
         # 执行开源平台签到
         try:
             # 先检查是否已经签到
@@ -770,12 +770,28 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
                 result['reward_results'] = click_gift_buttons(driver, account_index)
                 
             except:
-                # 如果没有找到"已签到"元素，则尝试点击"立即签到"按钮
-                try:
-                    sign_btn = wait.until(
-                        EC.element_to_be_clickable((By.XPATH, '//span[contains(text(),"立即签到")]'))
-                    )
-                    sign_btn.click()
+                # 如果没有找到"已签到"元素，则尝试点击"立即签到"按钮，并验证是否变为"已签到"
+                signed = False
+                max_attempts = 5
+                for attempt in range(max_attempts):
+                    try:
+                        sign_btn = wait.until(
+                            EC.element_to_be_clickable((By.XPATH, '//span[contains(text(),"立即签到")]'))
+                        )
+                        sign_btn.click()
+                        time.sleep(2)  # 等待页面更新
+                        driver.refresh()  # 刷新页面以确保状态更新
+                        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+                        time.sleep(2)  # 额外等待
+
+                        # 检查是否变为"已签到"
+                        signed_element = driver.find_element(By.XPATH, '//span[contains(text(),"已签到")]')
+                        signed = True
+                        break  # 成功，退出循环
+                    except:
+                        pass  # 静默继续下一次尝试
+
+                if signed:
                     log(f"账号 {account_index} - ✅ 开源平台签到成功！")
                     result['oshwhub_status'] = '签到成功'
                     result['oshwhub_success'] = True
@@ -785,9 +801,8 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
                     
                     # 6. 签到完成后点击7天好礼和月度好礼
                     result['reward_results'] = click_gift_buttons(driver, account_index)
-                    
-                except Exception as e:
-                    log(f"账号 {account_index} - ❌ 开源平台签到失败，未找到签到按钮: {e}")
+                else:
+                    log(f"账号 {account_index} - ❌ 开源平台签到失败")
                     result['oshwhub_status'] = '签到失败'
                     
         except Exception as e:
