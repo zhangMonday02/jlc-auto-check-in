@@ -991,47 +991,40 @@ def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, t
             is_final_retry=True
         )
         
-        # 如果最终重试成功，更新结果
-        if final_result['oshwhub_success'] and final_result['jindou_success']:
-            log(f"🎉 账号 {failed_acc['account_index']} - 重试成功！")
-            # 完全替换原结果
-            all_results[failed_acc['index']] = final_result
-        else:
-            # 部分成功的情况，只更新成功的部分
-            original_result = all_results[failed_acc['index']]
-            
-            # 更新开源平台结果
-            if final_result['oshwhub_success'] and not original_result['oshwhub_success']:
-                original_result['oshwhub_success'] = True
-                original_result['oshwhub_status'] = final_result['oshwhub_status']
-                original_result['initial_points'] = final_result['initial_points']
-                original_result['final_points'] = final_result['final_points']
-                original_result['points_reward'] = final_result['points_reward']
-                original_result['reward_results'] = final_result['reward_results']
-                log(f"✅ 账号 {failed_acc['account_index']} - 开源平台签到成功")
-            
-            # 更新金豆结果
-            if final_result['jindou_success'] and not original_result['jindou_success']:
-                original_result['jindou_success'] = True
-                original_result['jindou_status'] = final_result['jindou_status']
-                original_result['initial_jindou'] = final_result['initial_jindou']
-                original_result['final_jindou'] = final_result['final_jindou']
-                original_result['jindou_reward'] = final_result['jindou_reward']
-                original_result['has_jindou_reward'] = final_result['has_jindou_reward']
-                log(f"✅ 账号 {failed_acc['account_index']} - 金豆签到成功")
-            
-            # 更新其他信息
-            if original_result['nickname'] == '未知' and final_result['nickname'] != '未知':
-                original_result['nickname'] = final_result['nickname']
-            
-            if not original_result['token_extracted'] and final_result['token_extracted']:
-                original_result['token_extracted'] = final_result['token_extracted']
-            
-            if not original_result['secretkey_extracted'] and final_result['secretkey_extracted']:
-                original_result['secretkey_extracted'] = final_result['secretkey_extracted']
-            
-            original_result['is_final_retry'] = True
-            original_result['retry_count'] = failed_acc['previous_retry_count'] + 1
+        original_result = all_results[failed_acc['index']]
+        
+        # 更新开源平台结果
+        if final_result['oshwhub_success'] and not original_result['oshwhub_success']:
+            original_result['oshwhub_success'] = True
+            original_result['oshwhub_status'] = final_result['oshwhub_status']
+            original_result['initial_points'] = final_result['initial_points']
+            original_result['final_points'] = final_result['final_points']
+            original_result['points_reward'] = final_result['points_reward']
+            original_result['reward_results'] = final_result['reward_results']
+            log(f"✅ 账号 {failed_acc['account_index']} - 开源平台签到成功")
+        
+        # 更新金豆结果
+        if final_result['jindou_success'] and not original_result['jindou_success']:
+            original_result['jindou_success'] = True
+            original_result['jindou_status'] = final_result['jindou_status']
+            original_result['initial_jindou'] = final_result['initial_jindou']
+            original_result['final_jindou'] = final_result['final_jindou']
+            original_result['jindou_reward'] = final_result['jindou_reward']
+            original_result['has_jindou_reward'] = final_result['has_jindou_reward']
+            log(f"✅ 账号 {failed_acc['account_index']} - 金豆签到成功")
+        
+        # 更新其他信息
+        if original_result['nickname'] == '未知' and final_result['nickname'] != '未知':
+            original_result['nickname'] = final_result['nickname']
+        
+        if not original_result['token_extracted'] and final_result['token_extracted']:
+            original_result['token_extracted'] = final_result['token_extracted']
+        
+        if not original_result['secretkey_extracted'] and final_result['secretkey_extracted']:
+            original_result['secretkey_extracted'] = final_result['secretkey_extracted']
+        
+        original_result['is_final_retry'] = True
+        original_result['retry_count'] = failed_acc['previous_retry_count'] + 1
         
         # 如果不是最后一个账号，等待一段时间
         if failed_acc != failed_accounts[-1]:
