@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 import json
@@ -12,7 +13,6 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import os  # 读取环境变量
 
 # 全局变量用于收集总结日志
 in_summary = False
@@ -131,38 +131,47 @@ def extract_secretkey_from_devtools(driver):
     
     return secretkey
 
-@with_retry
 def get_oshwhub_points(driver, account_index):
     """获取开源平台积分数量"""
-    try:
-        # 获取当前页面的Cookie
-        cookies = driver.get_cookies()
-        cookie_str = "; ".join([f"{c['name']}={c['value']}" for c in cookies])
+    max_retries = 5
+    for attempt in range(max_retries):
+        try:
+            # 获取当前页面的Cookie
+            cookies = driver.get_cookies()
+            cookie_str = "; ".join([f"{c['name']}={c['value']}" for c in cookies])
+            
+            headers = {
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'accept': 'application/json, text/plain, */*',
+                'cookie': cookie_str
+            }
+            
+            # 调用用户信息API获取积分
+            response = requests.get("https://oshwhub.com/api/users", headers=headers, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if data and data.get('success'):
+                    points = data.get('result', {}).get('points', 0)
+                    return points
+        except Exception:
+            pass  # 静默重试
         
-        headers = {
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'accept': 'application/json, text/plain, */*',
-            'cookie': cookie_str
-        }
-        
-        # 调用用户信息API获取积分
-        response = requests.get("https://oshwhub.com/api/users", headers=headers, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            if data and data.get('success'):
-                points = data.get('result', {}).get('points', 0)
-                return points
-        
-        log(f"账号 {account_index} - ⚠ 无法获取积分信息")
-        return 0
-    except Exception as e:
-        log(f"账号 {account_index} - ⚠ 获取积分失败: {e}")
-        return 0
+        # 重试前刷新页面
+        if attempt < max_retries - 1:
+            try:
+                driver.refresh()
+                WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+                time.sleep(1 + random.uniform(0, 1))
+            except:
+                pass
+    
+    log(f"账号 {account_index} - ⚠ 无法获取积分信息")
+    return 0
 
 class JLCClient:
     """调用嘉立创接口"""
     
-    def __init__(self, access_token, secretkey, account_index):
+    def __init__(self, access_token, secretkey, account_index, driver):
         self.base_url = "https://m.jlc.com"
         self.headers = {
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -173,6 +182,7 @@ class JLCClient:
             'Referer': 'https://m.jlc.com/mapp/pages/my/index',
         }
         self.account_index = account_index
+        self.driver = driver
         self.message = ""
         self.initial_jindou = 0  # 签到前金豆数量
         self.final_jindou = 0    # 签到后金豆数量
@@ -211,18 +221,36 @@ class JLCClient:
             log(f"账号 {self.account_index} - ❌ 获取用户信息失败: {error_msg}")
             return False
     
-    @with_retry
     def get_points(self):
         """获取金豆数量"""
         url = f"{self.base_url}/api/activity/front/getCustomerIntegral"
-        data = self.send_request(url)
+        max_retries = 5
+        for attempt in range(max_retries):
+            data = self.send_request(url)
+            
+            if data and data.get('success'):
+                jindou_count = data.get('data', {}).get('integralVoucher', 0)
+                return jindou_count
+            
+            # 重试前刷新页面，重新提取 token 和 secretkey
+            if attempt < max_retries - 1:
+                try:
+                    self.driver.get("https://m.jlc.com/")
+                    self.driver.refresh()
+                    WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+                    time.sleep(1 + random.uniform(0, 1))
+                    navigate_and_interact_m_jlc(self.driver, self.account_index)
+                    access_token = extract_token_from_local_storage(self.driver)
+                    secretkey = extract_secretkey_from_devtools(self.driver)
+                    if access_token:
+                        self.headers['x-jlc-accesstoken'] = access_token
+                    if secretkey:
+                        self.headers['secretkey'] = secretkey
+                except:
+                    pass  # 静默继续
         
-        if data and data.get('success'):
-            jindou_count = data.get('data', {}).get('integralVoucher', 0)
-            return jindou_count
-        else:
-            log(f"账号 {self.account_index} - ❌ 获取金豆数量失败")
-            return 0
+        log(f"账号 {self.account_index} - ❌ 获取金豆数量失败")
+        return 0
     
     def check_sign_status(self):
         """检查签到状态"""
@@ -850,7 +878,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
         if access_token and secretkey:
             log(f"账号 {account_index} - ✅ 成功提取 token 和 secretkey")
             
-            jlc_client = JLCClient(access_token, secretkey, account_index)
+            jlc_client = JLCClient(access_token, secretkey, account_index, driver)
             jindou_success = jlc_client.execute_full_process()
             
             # 记录金豆签到结果
