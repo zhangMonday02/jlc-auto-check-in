@@ -508,7 +508,7 @@ def get_user_nickname_from_api(driver, account_index):
         }
         
         # 调用用户信息API
-        response = requests.get("https://oshwhub.com/api/users", headers=headers, timeout=10)
+       response = requests.get("https://oshwhub.com/api/users", headers=headers, timeout=10)
         if response.status_code == 200:
             data = response.json()
             if data and data.get('success'):
@@ -1087,7 +1087,9 @@ def push_summary():
         try:
             url = f"https://api.telegram.org/bot{telegram_bot_token}/sendMessage"
             params = {'chat_id': telegram_chat_id, 'text': full_text}
-            requests.get(url, params=params)
+            response = requests.get(url, params=params)
+            if response.status_code == 200:
+                log("Telegram-日志已推送成功")
         except:
             pass  # 静默失败
 
@@ -1100,7 +1102,9 @@ def push_summary():
             else:
                 url = f"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key={wechat_webhook_key}"
             body = {"msgtype": "text", "text": {"content": full_text}}
-            requests.post(url, json=body)
+            response = requests.post(url, json=body)
+            if response.status_code == 200:
+                log("企业微信-日志已推送成功")
         except:
             pass
 
@@ -1113,7 +1117,9 @@ def push_summary():
             else:
                 url = f"https://oapi.dingtalk.com/robot/send?access_token={dingtalk_webhook}"
             body = {"msgtype": "text", "text": {"content": full_text}}
-            requests.post(url, json=body)
+            response = requests.post(url, json=body)
+            if response.status_code == 200:
+                log("钉钉-日志已推送成功")
         except:
             pass
 
@@ -1123,7 +1129,9 @@ def push_summary():
         try:
             url = "http://www.pushplus.plus/send"
             body = {"token": pushplus_token, "title": title, "content": text}
-            requests.post(url, json=body)
+            response = requests.post(url, json=body)
+            if response.status_code == 200:
+                log("PushPlus-日志已推送成功")
         except:
             pass
 
@@ -1133,7 +1141,9 @@ def push_summary():
         try:
             url = f"https://sctapi.ftqq.com/{serverchan_sckey}.send"
             body = {"title": title, "desp": text}
-            requests.post(url, data=body)
+            response = requests.post(url, data=body)
+            if response.status_code == 200:
+                log("Server酱-日志已推送成功")
         except:
             pass
 
@@ -1142,7 +1152,9 @@ def push_summary():
     if coolpush_skey:
         try:
             url = f"https://push.xuthus.cc/send/{coolpush_skey}?c={full_text}"
-            requests.get(url)
+            response = requests.get(url)
+            if response.status_code == 200:
+                log("酷推-日志已推送成功")
         except:
             pass
 
@@ -1151,7 +1163,9 @@ def push_summary():
     if custom_webhook:
         try:
             body = {"title": title, "content": text}
-            requests.post(custom_webhook, json=body)
+            response = requests.post(custom_webhook, json=body)
+            if response.status_code == 200:
+                log("自定义API-日志已推送成功")
         except:
             pass
 
