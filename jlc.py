@@ -12,9 +12,9 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import os  # 新增：读取环境变量
+import os  # 读取环境变量
 
-# 新增：全局变量用于收集总结日志
+# 全局变量用于收集总结日志
 in_summary = False
 summary_logs = []
 
@@ -1043,7 +1043,7 @@ def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, t
     log("✅ 最终重试完成")
     return all_results
 
-# 新增：推送函数
+# 推送函数
 def push_summary():
     if not summary_logs:
         return
@@ -1128,7 +1128,7 @@ def push_summary():
             pass
 
 def main():
-    global in_summary  # 新增：全局标志
+    global in_summary
     
     if len(sys.argv) < 3:
         print("用法: python jlc.py 账号1,账号2,账号3... 密码1,密码2,密码3... [失败退出标志]")
@@ -1175,7 +1175,7 @@ def main():
     
     # 输出详细总结
     log("=" * 70)
-    in_summary = True  # 新增：启用总结收集
+    in_summary = True  # 启用总结收集
     log("📊 详细签到任务完成总结")
     log("=" * 70)
     
@@ -1278,7 +1278,7 @@ def main():
     
     log("=" * 70)
     
-    # 新增：推送总结
+    # 推送总结
     push_summary()
     
     # 根据失败退出标志决定退出码
