@@ -11,6 +11,16 @@ jobs:
   running:
     runs-on: ubuntu-22.04
 
+    env:  # 新增：注入推送相关的环境变量（从secrets读取）
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      WECHAT_WEBHOOK_KEY: ${{ secrets.WECHAT_WEBHOOK_KEY }}
+      DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+      PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+      SERVERCHAN_SCKEY: ${{ secrets.SERVERCHAN_SCKEY }}
+      COOLPUSH_SKEY: ${{ secrets.COOLPUSH_SKEY }}
+      CUSTOM_WEBHOOK: ${{ secrets.CUSTOM_WEBHOOK }}
+
     steps:
       - name: '检出代码'
         uses: actions/checkout@v3
@@ -34,15 +44,5 @@ jobs:
         uses: nanasess/setup-chromedriver@v2
 
       - name: '进行签到流程(日志在这里看)'
-        env:  # 新增：注入推送secrets作为环境变量
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          WECHAT_WORK_KEY: ${{ secrets.WECHAT_WORK_KEY }}
-          DINGTALK_TOKEN: ${{ secrets.DINGTALK_TOKEN }}
-          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
-          SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
-          COOLPUSH_TOKEN: ${{ secrets.COOLPUSH_TOKEN }}
-          CUSTOM_API_URL: ${{ secrets.CUSTOM_API_URL }}
-          CUSTOM_API_KEY: ${{ secrets.CUSTOM_API_KEY }}
         run: |
           python ./jlc.py "${{ secrets.JLC_USERNAME }}" "${{ secrets.JLC_PASSWORD }}" "${{ secrets.ERROR }}"
