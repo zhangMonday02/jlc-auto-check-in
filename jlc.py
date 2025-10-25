@@ -1067,7 +1067,10 @@ def push_summary():
     wechat_webhook_key = os.getenv('WECHAT_WEBHOOK_KEY')
     if wechat_webhook_key:
         try:
-            url = f"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key={wechat_webhook_key}"
+            if wechat_webhook_key.startswith('https://'):
+                url = wechat_webhook_key
+            else:
+                url = f"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key={wechat_webhook_key}"
             body = {"msgtype": "text", "text": {"content": full_text}}
             requests.post(url, json=body)
         except:
@@ -1077,7 +1080,10 @@ def push_summary():
     dingtalk_webhook = os.getenv('DINGTALK_WEBHOOK')
     if dingtalk_webhook:
         try:
-            url = f"https://oapi.dingtalk.com/robot/send?access_token={dingtalk_webhook}"
+            if dingtalk_webhook.startswith('https://'):
+                url = dingtalk_webhook
+            else:
+                url = f"https://oapi.dingtalk.com/robot/send?access_token={dingtalk_webhook}"
             body = {"msgtype": "text", "text": {"content": full_text}}
             requests.post(url, json=body)
         except:
