@@ -3,7 +3,8 @@ import time
 import json
 import tempfile
 import random
-import requests
+import requests  # 新增：用于推送
+import os  # 新增：用于获取环境变量
 from datetime import datetime, timedelta
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -12,7 +13,8 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import os  # 添加os以读取环境变量
+import io  # 新增：用于捕获stdout
+import contextlib  # 新增：用于重定向stdout
 
 def log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
@@ -1036,142 +1038,181 @@ def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, t
     log("✅ 最终重试完成")
     return all_results
 
-# 新增推送函数
-def send_to_telegram(title, content):
-    token = os.environ.get('TELEGRAM_TOKEN')
+# 新增：推送函数
+def send_to_telegram(text):
+    """发送到Telegram"""
+    token = os.environ.get('TELEGRAM_BOT_TOKEN')
     chat_id = os.environ.get('TELEGRAM_CHAT_ID')
-    if token and chat_id:
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        params = {
-            'chat_id': chat_id,
-            'text': f"{title}\n\n{content}",
-            'parse_mode': 'Markdown'  # 支持Markdown
-        }
+    if not token or not chat_id:
+        return False
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {'chat_id': chat_id, 'text': text, 'parse_mode': 'Markdown'}
+    for attempt in range(3):  # 重试3次
         try:
-            response = requests.post(url, params=params)
-            if response.status_code == 200:
+            resp = requests.post(url, json=payload, timeout=10)
+            if resp.status_code == 200:
                 log("✅ Telegram推送成功")
-            else:
-                log(f"❌ Telegram推送失败: {response.text}")
+                return True
         except Exception as e:
-            log(f"❌ Telegram推送异常: {e}")
+            log(f"❌ Telegram推送失败 (尝试{attempt+1}): {e}")
+            time.sleep(1)
+    return False
 
-def send_to_wechat(title, content):
-    webhook = os.environ.get('WECHAT_WEBHOOK')
-    if webhook:
-        payload = {
-            "msgtype": "text",
-            "text": {"content": f"{title}\n\n{content}"}
-        }
+def send_to_wechat_work(text):
+    """发送到企业微信"""
+    key = os.environ.get('WECHAT_WORK_KEY')
+    if not key:
+        return False
+    url = f"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key={key}"
+    payload = {
+        "msgtype": "text",
+        "text": {"content": text}
+    }
+    for attempt in range(3):
         try:
-            response = requests.post(webhook, json=payload)
-            if response.status_code == 200:
+            resp = requests.post(url, json=payload, timeout=10)
+            if resp.status_code == 200 and resp.json().get('errcode') == 0:
                 log("✅ 企业微信推送成功")
-            else:
-                log(f"❌ 企业微信推送失败: {response.text}")
+                return True
         except Exception as e:
-            log(f"❌ 企业微信推送异常: {e}")
+            log(f"❌ 企业微信推送失败 (尝试{attempt+1}): {e}")
+            time.sleep(1)
+    return False
 
-def send_to_dingtalk(title, content):
-    webhook = os.environ.get('DINGTALK_WEBHOOK')
-    if webhook:
-        payload = {
-            "msgtype": "text",
-            "text": {"content": f"{title}\n\n{content}"}
-        }
+def send_to_dingtalk(text):
+    """发送到钉钉"""
+    token = os.environ.get('DINGTALK_TOKEN')
+    if not token:
+        return False
+    url = f"https://oapi.dingtalk.com/robot/send?access_token={token}"
+    payload = {
+        "msgtype": "text",
+        "text": {"content": text}
+    }
+    for attempt in range(3):
         try:
-            response = requests.post(webhook, json=payload)
-            if response.status_code == 200:
+            resp = requests.post(url, json=payload, timeout=10)
+            if resp.status_code == 200 and resp.json().get('errcode') == 0:
                 log("✅ 钉钉推送成功")
-            else:
-                log(f"❌ 钉钉推送失败: {response.text}")
+                return True
         except Exception as e:
-            log(f"❌ 钉钉推送异常: {e}")
+            log(f"❌ 钉钉推送失败 (尝试{attempt+1}): {e}")
+            time.sleep(1)
+    return False
 
-def send_to_pushplus(title, content):
+def send_to_pushplus(text):
+    """发送到PushPlus"""
     token = os.environ.get('PUSHPLUS_TOKEN')
-    if token:
-        url = "http://www.pushplus.plus/send"
-        params = {
-            'token': token,
-            'title': title,
-            'content': content
-        }
+    if not token:
+        return False
+    url = "http://www.pushplus.plus/send"
+    payload = {
+        "token": token,
+        "title": "嘉立创签到任务完成总结",
+        "content": text,
+        "template": "html"  # 支持Markdown/HTML
+    }
+    for attempt in range(3):
         try:
-            response = requests.get(url, params=params)
-            if response.status_code == 200:
+            resp = requests.post(url, json=payload, timeout=10)
+            if resp.status_code == 200 and resp.json().get('code') == 200:
                 log("✅ PushPlus推送成功")
-            else:
-                log(f"❌ PushPlus推送失败: {response.text}")
+                return True
         except Exception as e:
-            log(f"❌ PushPlus推送异常: {e}")
+            log(f"❌ PushPlus推送失败 (尝试{attempt+1}): {e}")
+            time.sleep(1)
+    return False
 
-def send_to_serverchan(title, content):
-    key = os.environ.get('SERVERCHAN_KEY')
-    if key:
-        url = f"https://sctapi.ftqq.com/{key}.send"
-        params = {
-            'title': title,
-            'desp': content
-        }
+def send_to_serverchan(text):
+    """发送到Server酱"""
+    sendkey = os.environ.get('SERVERCHAN_SENDKEY')
+    if not sendkey:
+        return False
+    title = "嘉立创签到任务完成总结"
+    url = f"https://sctapi.ftqq.com/{sendkey}.send"
+    params = {'text': title, 'desp': text}
+    for attempt in range(3):
         try:
-            response = requests.post(url, params=params)
-            if response.status_code == 200:
+            resp = requests.get(url, params=params, timeout=10)
+            if resp.status_code == 200 and resp.json().get('code') == 0:
                 log("✅ Server酱推送成功")
-            else:
-                log(f"❌ Server酱推送失败: {response.text}")
+                return True
         except Exception as e:
-            log(f"❌ Server酱推送异常: {e}")
+            log(f"❌ Server酱推送失败 (尝试{attempt+1}): {e}")
+            time.sleep(1)
+    return False
 
-def send_to_coolpush(title, content):
-    key = os.environ.get('COOLPUSH_KEY')
-    if key:
-        url = f"https://cp.xuthus.cc/send/{key}"
-        params = {
-            'msg': f"{title}\n\n{content}"
-        }
+def send_to_coolpush(text):
+    """发送到酷推（类似PushPlus）"""
+    token = os.environ.get('COOLPUSH_TOKEN')
+    if not token:
+        return False
+    url = "https://cp.pushplus.plus/send"
+    payload = {
+        "token": token,
+        "title": "嘉立创签到任务完成总结",
+        "content": text,
+        "template": "html"
+    }
+    for attempt in range(3):
         try:
-            response = requests.get(url, params=params)
-            if response.status_code == 200:
+            resp = requests.post(url, json=payload, timeout=10)
+            if resp.status_code == 200 and resp.json().get('code') == 200:
                 log("✅ 酷推推送成功")
-            else:
-                log(f"❌ 酷推推送失败: {response.text}")
+                return True
         except Exception as e:
-            log(f"❌ 酷推推送异常: {e}")
+            log(f"❌ 酷推推送失败 (尝试{attempt+1}): {e}")
+            time.sleep(1)
+    return False
 
-def send_to_custom(title, content):
-    url = os.environ.get('CUSTOM_WEBHOOK_URL')
-    method = os.environ.get('CUSTOM_WEBHOOK_METHOD', 'POST').upper()
-    headers_str = os.environ.get('CUSTOM_WEBHOOK_HEADERS', '{}')
-    payload_template = os.environ.get('CUSTOM_WEBHOOK_PAYLOAD_TEMPLATE', '{}')
-    if url:
+def send_to_custom_api(text):
+    """发送到自定义API（POST JSON）"""
+    url = os.environ.get('CUSTOM_API_URL')
+    api_key = os.environ.get('CUSTOM_API_KEY')
+    if not url:
+        return False
+    headers = {'Content-Type': 'application/json'}
+    if api_key:
+        headers['Authorization'] = f'Bearer {api_key}'
+    payload = {
+        'title': '嘉立创签到任务完成总结',
+        'content': text,
+        'timestamp': datetime.now().isoformat()
+    }
+    for attempt in range(3):
         try:
-            headers = json.loads(headers_str)
-            payload_str = payload_template.replace('{title}', title).replace('{content}', content)
-            payload = json.loads(payload_str) if payload_str else {}
-            
-            if method == 'GET':
-                params = {'title': title, 'content': content}  # 默认附加到query
-                response = requests.get(url, params=params, headers=headers)
-            else:
-                response = requests.post(url, json=payload, headers=headers)
-            
-            if response.status_code in (200, 201, 204):
-                log("✅ 自定义推送成功")
-            else:
-                log(f"❌ 自定义推送失败: {response.text}")
+            resp = requests.post(url, json=payload, headers=headers, timeout=10)
+            if resp.status_code in [200, 201]:
+                log("✅ 自定义API推送成功")
+                return True
         except Exception as e:
-            log(f"❌ 自定义推送异常: {e}")
+            log(f"❌ 自定义API推送失败 (尝试{attempt+1}): {e}")
+            time.sleep(1)
+    return False
 
-def push_summary(summary_content):
-    title = "嘉立创签到总结"
-    send_to_telegram(title, summary_content)
-    send_to_wechat(title, summary_content)
-    send_to_dingtalk(title, summary_content)
-    send_to_pushplus(title, summary_content)
-    send_to_serverchan(title, summary_content)
-    send_to_coolpush(title, summary_content)
-    send_to_custom(title, summary_content)
+def send_summary_to_platforms(summary_text):
+    """发送总结到所有配置的平台"""
+    title = "嘉立创签到任务完成总结"
+    full_message = f"**{title}**\n\n{summary_text}"  # Markdown格式化
+    
+    platforms = [
+        send_to_telegram,
+        send_to_wechat_work,
+        send_to_dingtalk,
+        send_to_pushplus,
+        send_to_serverchan,
+        send_to_coolpush,
+        send_to_custom_api
+    ]
+    
+    success_count = 0
+    for platform in platforms:
+        if platform(full_message):
+            success_count += 1
+    
+    log(f"📤 推送完成: {success_count}/{len(platforms)} 个平台成功")
+    if success_count == 0:
+        log("⚠️ 所有推送平台配置失败或未配置，请检查secrets")
 
 def main():
     if len(sys.argv) < 3:
@@ -1217,160 +1258,118 @@ def main():
     if has_failed_accounts:
         all_results = execute_final_retry_for_failed_accounts(all_results, usernames, passwords, total_accounts)
     
-    # 输出详细总结（收集日志）
-    summary_logs = []  # 收集总结日志
+    # 新增：捕获总结日志并推送
     log("=" * 70)
-    summary_logs.append("=" * 70)
     log("📊 详细签到任务完成总结")
-    summary_logs.append("📊 详细签到任务完成总结")
     log("=" * 70)
-    summary_logs.append("=" * 70)
     
-    oshwhub_success_count = 0
-    jindou_success_count = 0
-    total_points_reward = 0
-    total_jindou_reward = 0
-    retried_accounts = []  # 合并所有重试过的账号，包括最终重试
-    
-    # 记录失败的账号
-    failed_accounts = []
-    
-    for result in all_results:
-        account_index = result['account_index']
-        nickname = result.get('nickname', '未知')
-        retry_count = result.get('retry_count', 0)
-        is_final_retry = result.get('is_final_retry', False)
+    # 使用StringIO捕获总结输出
+    summary_output = io.StringIO()
+    with contextlib.redirect_stdout(summary_output):
+        oshwhub_success_count = 0
+        jindou_success_count = 0
+        total_points_reward = 0
+        total_jindou_reward = 0
+        retried_accounts = []  # 合并所有重试过的账号，包括最终重试
         
-        if retry_count > 0 or is_final_retry:
-            retried_accounts.append(account_index)
+        # 记录失败的账号
+        failed_accounts = []
         
-        # 检查是否有失败情况
-        if not result['oshwhub_success'] or not result['jindou_success']:
-            failed_accounts.append(account_index)
+        for result in all_results:
+            account_index = result['account_index']
+            nickname = result.get('nickname', '未知')
+            retry_count = result.get('retry_count', 0)
+            is_final_retry = result.get('is_final_retry', False)
+            
+            if retry_count > 0 or is_final_retry:
+                retried_accounts.append(account_index)
+            
+            # 检查是否有失败情况
+            if not result['oshwhub_success'] or not result['jindou_success']:
+                failed_accounts.append(account_index)
+            
+            retry_label = ""
+            if retry_count > 0:
+                 retry_label = f" [重试{retry_count}次]"
+            elif is_final_retry:
+                retry_label = " [最终重试]"
+            
+            log(f"账号 {account_index} ({nickname}) 详细结果:{retry_label}")
+            log(f"  ├── 开源平台: {result['oshwhub_status']}")
+            
+            # 显示积分变化
+            if result['points_reward'] > 0:
+                log(f"  ├── 积分变化: {result['initial_points']} → {result['final_points']} (+{result['points_reward']})")
+                total_points_reward += result['points_reward']
+            elif result['points_reward'] == 0 and result['initial_points'] > 0:
+                log(f"  ├── 积分变化: {result['initial_points']} → {result['final_points']} (0)")
+            else:
+                log(f"  ├── 积分状态: 无法获取积分信息")
+            
+            log(f"  ├── 金豆签到: {result['jindou_status']}")
+            
+            # 显示金豆变化
+            if result['jindou_reward'] > 0:
+                jindou_text = f"  ├── 金豆变化: {result['initial_jindou']} → {result['final_jindou']} (+{result['jindou_reward']})"
+                if result['has_jindou_reward']:
+                    jindou_text += "（有奖励）"
+                log(jindou_text)
+                total_jindou_reward += result['jindou_reward']
+            elif result['jindou_reward'] == 0 and result['initial_jindou'] > 0:
+                log(f"  ├── 金豆变化: {result['initial_jindou']} → {result['final_jindou']} (0)")
+            else:
+                log(f"  ├── 金豆状态: 无法获取金豆信息")
+            
+            # 显示礼包领取结果
+            for reward_result in result['reward_results']:
+                log(f"  ├── {reward_result}")
+            
+            if result['oshwhub_success']:
+                oshwhub_success_count += 1
+            if result['jindou_success']:
+                jindou_success_count += 1
+            
+            log("  " + "-" * 50)
         
-        retry_label = ""
-        if retry_count > 0:
-             retry_label = f" [重试{retry_count}次]"
-        elif is_final_retry:
-            retry_label = " [最终重试]"
+        # 总体统计
+        log("📈 总体统计:")
+        log(f"  ├── 总账号数: {total_accounts}")
+        log(f"  ├── 开源平台签到成功: {oshwhub_success_count}/{total_accounts}")
+        log(f"  ├── 金豆签到成功: {jindou_success_count}/{total_accounts}")
         
-        msg = f"账号 {account_index} ({nickname}) 详细结果:{retry_label}"
-        log(msg)
-        summary_logs.append(msg)
-        msg = f"  ├── 开源平台: {result['oshwhub_status']}"
-        log(msg)
-        summary_logs.append(msg)
+        if total_points_reward > 0:
+            log(f"  ├── 总计获得积分: +{total_points_reward}")
         
-        # 显示积分变化
-        if result['points_reward'] > 0:
-            msg = f"  ├── 积分变化: {result['initial_points']} → {result['final_points']} (+{result['points_reward']})"
-            log(msg)
-            summary_logs.append(msg)
-            total_points_reward += result['points_reward']
-        elif result['points_reward'] == 0 and result['initial_points'] > 0:
-            msg = f"  ├── 积分变化: {result['initial_points']} → {result['final_points']} (0)"
-            log(msg)
-            summary_logs.append(msg)
-        else:
-            msg = f"  ├── 积分状态: 无法获取积分信息"
-            log(msg)
-            summary_logs.append(msg)
+        if total_jindou_reward > 0:
+            log(f"  ├── 总计获得金豆: +{total_jindou_reward}")
         
-        msg = f"  ├── 金豆签到: {result['jindou_status']}"
-        log(msg)
-        summary_logs.append(msg)
+        # 计算成功率
+        oshwhub_rate = (oshwhub_success_count / total_accounts) * 100
+        jindou_rate = (jindou_success_count / total_accounts) * 100
         
-        # 显示金豆变化
-        if result['jindou_reward'] > 0:
-            jindou_text = f"  ├── 金豆变化: {result['initial_jindou']} → {result['final_jindou']} (+{result['jindou_reward']})"
-            if result['has_jindou_reward']:
-                jindou_text += "（有奖励）"
-            log(jindou_text)
-            summary_logs.append(jindou_text)
-            total_jindou_reward += result['jindou_reward']
-        elif result['jindou_reward'] == 0 and result['initial_jindou'] > 0:
-            msg = f"  ├── 金豆变化: {result['initial_jindou']} → {result['final_jindou']} (0)"
-            log(msg)
-            summary_logs.append(msg)
-        else:
-            msg = f"  ├── 金豆状态: 无法获取金豆信息"
-            log(msg)
-            summary_logs.append(msg)
+        log(f"  ├── 开源平台成功率: {oshwhub_rate:.1f}%")
+        log(f"  └── 金豆签到成功率: {jindou_rate:.1f}%")
         
-        # 显示礼包领取结果
-        for reward_result in result['reward_results']:
-            msg = f"  ├── {reward_result}"
-            log(msg)
-            summary_logs.append(msg)
+        # 失败账号列表
+        failed_oshwhub = [r['account_index'] for r in all_results if not r['oshwhub_success']]
+        failed_jindou = [r['account_index'] for r in all_results if not r['jindou_success']]
         
-        if result['oshwhub_success']:
-            oshwhub_success_count += 1
-        if result['jindou_success']:
-            jindou_success_count += 1
+        if failed_oshwhub:
+            log(f"  ⚠ 开源平台失败账号: {', '.join(map(str, failed_oshwhub))}")
         
-        msg = "  " + "-" * 50
-        log(msg)
-        summary_logs.append(msg)
+        if failed_jindou:
+            log(f"  ⚠ 金豆签到失败账号: {', '.join(map(str, failed_jindou))}")
+        
+        if not failed_oshwhub and not failed_jindou:
+            log("  🎉 所有账号全部签到成功!")
+        
+        log("=" * 70)
     
-    # 总体统计
-    log("📈 总体统计:")
-    summary_logs.append("📈 总体统计:")
-    msg = f"  ├── 总账号数: {total_accounts}"
-    log(msg)
-    summary_logs.append(msg)
-    msg = f"  ├── 开源平台签到成功: {oshwhub_success_count}/{total_accounts}"
-    log(msg)
-    summary_logs.append(msg)
-    msg = f"  ├── 金豆签到成功: {jindou_success_count}/{total_accounts}"
-    log(msg)
-    summary_logs.append(msg)
+    # 获取捕获的总结内容
+    summary_text = summary_output.getvalue().strip()
     
-    if total_points_reward > 0:
-        msg = f"  ├── 总计获得积分: +{total_points_reward}"
-        log(msg)
-        summary_logs.append(msg)
-    
-    if total_jindou_reward > 0:
-        msg = f"  ├── 总计获得金豆: +{total_jindou_reward}"
-        log(msg)
-        summary_logs.append(msg)
-    
-    # 计算成功率
-    oshwhub_rate = (oshwhub_success_count / total_accounts) * 100
-    jindou_rate = (jindou_success_count / total_accounts) * 100
-    
-    msg = f"  ├── 开源平台成功率: {oshwhub_rate:.1f}%"
-    log(msg)
-    summary_logs.append(msg)
-    msg = f"  └── 金豆签到成功率: {jindou_rate:.1f}%"
-    log(msg)
-    summary_logs.append(msg)
-    
-    # 失败账号列表
-    failed_oshwhub = [r['account_index'] for r in all_results if not r['oshwhub_success']]
-    failed_jindou = [r['account_index'] for r in all_results if not r['jindou_success']]
-    
-    if failed_oshwhub:
-        msg = f"  ⚠ 开源平台失败账号: {', '.join(map(str, failed_oshwhub))}"
-        log(msg)
-        summary_logs.append(msg)
-    
-    if failed_jindou:
-        msg = f"  ⚠ 金豆签到失败账号: {', '.join(map(str, failed_jindou))}"
-        log(msg)
-        summary_logs.append(msg)
-    
-    if not failed_oshwhub and not failed_jindou:
-        msg = "  🎉 所有账号全部签到成功!"
-        log(msg)
-        summary_logs.append(msg)
-    
-    log("=" * 70)
-    summary_logs.append("=" * 70)
-    
-    # 推送总结日志
-    summary_content = "\n".join(summary_logs)
-    push_summary(summary_content)
+    # 发送推送（新增）
+    send_summary_to_platforms(summary_text)
     
     # 根据失败退出标志决定退出码
     if enable_failure_exit and failed_accounts:
