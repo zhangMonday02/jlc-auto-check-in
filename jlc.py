@@ -1089,7 +1089,7 @@ def push_summary():
             params = {'chat_id': telegram_chat_id, 'text': full_text}
             response = requests.get(url, params=params)
             if response.status_code == 200:
-                log("Telegram-日志已推送成功")
+                log("Telegram-日志已推送")
         except:
             pass  # 静默失败
 
@@ -1104,7 +1104,7 @@ def push_summary():
             body = {"msgtype": "text", "text": {"content": full_text}}
             response = requests.post(url, json=body)
             if response.status_code == 200:
-                log("企业微信-日志已推送成功")
+                log("企业微信-日志已推送")
         except:
             pass
 
@@ -1119,7 +1119,7 @@ def push_summary():
             body = {"msgtype": "text", "text": {"content": full_text}}
             response = requests.post(url, json=body)
             if response.status_code == 200:
-                log("钉钉-日志已推送成功")
+                log("钉钉-日志已推送")
         except:
             pass
 
@@ -1131,7 +1131,7 @@ def push_summary():
             body = {"token": pushplus_token, "title": title, "content": text}
             response = requests.post(url, json=body)
             if response.status_code == 200:
-                log("PushPlus-日志已推送成功")
+                log("PushPlus-日志已推送")
         except:
             pass
 
@@ -1143,7 +1143,7 @@ def push_summary():
             body = {"title": title, "desp": text}
             response = requests.post(url, data=body)
             if response.status_code == 200:
-                log("Server酱-日志已推送成功")
+                log("Server酱-日志已推送")
         except:
             pass
 
@@ -1154,7 +1154,7 @@ def push_summary():
             url = f"https://push.xuthus.cc/send/{coolpush_skey}?c={full_text}"
             response = requests.get(url)
             if response.status_code == 200:
-                log("酷推-日志已推送成功")
+                log("酷推-日志已推送")
         except:
             pass
 
@@ -1165,7 +1165,7 @@ def push_summary():
             body = {"title": title, "content": text}
             response = requests.post(custom_webhook, json=body)
             if response.status_code == 200:
-                log("自定义API-日志已推送成功")
+                log("自定义API-日志已推送")
         except:
             pass
 
