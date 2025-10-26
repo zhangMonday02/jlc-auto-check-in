@@ -508,7 +508,7 @@ def get_user_nickname_from_api(driver, account_index):
         }
         
         # 调用用户信息API
-       response = requests.get("https://oshwhub.com/api/users", headers=headers, timeout=10)
+        response = requests.get("https://oshwhub.com/api/users", headers=headers, timeout=10)
         if response.status_code == 200:
             data = response.json()
             if data and data.get('success'):
