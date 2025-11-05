@@ -655,7 +655,8 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
         'token_extracted': False,
         'secretkey_extracted': False,
         'retry_count': retry_count,
-        'is_final_retry': is_final_retry
+        'is_final_retry': is_final_retry,
+        'password_error': False   # 新增字段：是否密码错误
     }
 
     try:
@@ -711,8 +712,8 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
             return result
 
         # 处理滑块验证
-        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, ".btn_slide")))
         try:
+            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, ".btn_slide")))
             slider = wait.until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, ".btn_slide"))
             )
@@ -749,6 +750,20 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
         except Exception as e:
             log(f"账号 {account_index} - 滑块验证处理: {e}")
 
+        # 立即检测是否弹出“账号或密码不正确”
+        try:
+            error_elem = WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located((By.XPATH, '//div[contains(text(), "账号或密码不正确")]'))
+            )
+            if error_elem:
+                log(f"账号 {account_index} - ❌ 检测到账号或密码不正确，跳过此账号")
+                result['password_error'] = True
+                result['oshwhub_status'] = '密码错误'
+                result['jindou_status'] = '密码错误'
+                return result
+        except:
+            pass  # 没有错误，继续
+
         # 等待跳转
         log(f"账号 {account_index} - 等待登录跳转...")
         max_wait = 15
@@ -769,6 +784,18 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
             log(f"账号 {account_index} - ❌ 跳转超时，当前页面标题: {current_title}")
             result['oshwhub_status'] = '跳转失败'
             return result
+
+        # 再次检测是否弹出“账号或密码不正确”（以防延迟）
+        try:
+            error_elem = driver.find_element(By.XPATH, '//div[contains(text(), "账号或密码不正确")]')
+            if error_elem:
+                log(f"账号 {account_index} - ❌ 检测到账号或密码不正确，跳过此账号")
+                result['password_error'] = True
+                result['oshwhub_status'] = '密码错误'
+                result['jindou_status'] = '密码错误'
+                return result
+        except:
+            pass  # 没有错误，继续
 
         # 3. 获取用户昵称
         time.sleep(1)
@@ -906,10 +933,10 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
     
     return result
 
-def should_retry(merged_success):
-    """判断是否需要重试：如果开源平台或金豆签到未成功"""
+def should_retry(merged_success, password_error):
+    """判断是否需要重试：如果开源平台或金豆签到未成功，且不是密码错误"""
     need_retry = not merged_success['oshwhub'] or not merged_success['jindou']
-    return need_retry
+    return need_retry and not password_error
 
 def process_single_account(username, password, account_index, total_accounts):
     """处理单个账号，包含重试机制，并合并多次尝试的最佳结果"""
@@ -932,13 +959,21 @@ def process_single_account(username, password, account_index, total_accounts):
         'token_extracted': False,
         'secretkey_extracted': False,
         'retry_count': 0,  # 记录最后使用的retry_count
-        'is_final_retry': False
+        'is_final_retry': False,
+        'password_error': False
     }
     
     merged_success = {'oshwhub': False, 'jindou': False}
 
     for attempt in range(max_retries + 1):  # 第一次执行 + 重试次数
         result = sign_in_account(username, password, account_index, total_accounts, retry_count=attempt)
+        
+        # 如果密码错误，直接返回，不重试
+        if result['password_error']:
+            merged_result['password_error'] = True
+            merged_result['oshwhub_status'] = '密码错误'
+            merged_result['jindou_status'] = '密码错误'
+            return merged_result
         
         # 合并开源平台结果：如果本次成功且之前未成功，则更新
         if result['oshwhub_success'] and not merged_success['oshwhub']:
@@ -972,7 +1007,7 @@ def process_single_account(username, password, account_index, total_accounts):
         merged_result['retry_count'] = result['retry_count']
         
         # 检查是否还需要重试
-        if not should_retry(merged_success) or attempt >= max_retries:
+        if not should_retry(merged_success, merged_result['password_error']) or attempt >= max_retries:
             break
         else:
             log(f"账号 {account_index} - 🔄 准备第 {attempt + 1} 次重试，等待 {random.randint(2, 6)} 秒后重新开始...")
@@ -990,10 +1025,10 @@ def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, t
     log("🔄 执行最终重试 - 处理所有重试后仍失败的账号")
     log("=" * 70)
     
-    # 找出需要最终重试的账号
+    # 找出需要最终重试的账号（排除密码错误的）
     failed_accounts = []
     for i, result in enumerate(all_results):
-        if not result['oshwhub_success'] or not result['jindou_success']:
+        if (not result['oshwhub_success'] or not result['jindou_success']) and not result['password_error']:
             failed_accounts.append({
                 'index': i,
                 'account_index': result['account_index'],
@@ -1026,6 +1061,13 @@ def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, t
             retry_count=failed_acc['previous_retry_count'] + 1,
             is_final_retry=True
         )
+        
+        # 如果最终重试中检测到密码错误，更新
+        if final_result['password_error']:
+            all_results[failed_acc['index']]['password_error'] = True
+            all_results[failed_acc['index']]['oshwhub_status'] = '密码错误'
+            all_results[failed_acc['index']]['jindou_status'] = '密码错误'
+            continue
         
         original_result = all_results[failed_acc['index']]
         
@@ -1210,7 +1252,7 @@ def main():
             time.sleep(wait_time)
     
     # 检查是否有失败的账号，执行最终重试
-    has_failed_accounts = any(not result['oshwhub_success'] or not result['jindou_success'] for result in all_results)
+    has_failed_accounts = any((not result['oshwhub_success'] or not result['jindou_success']) and not result['password_error'] for result in all_results)
     
     if has_failed_accounts:
         all_results = execute_final_retry_for_failed_accounts(all_results, usernames, passwords, total_accounts)
@@ -1227,8 +1269,9 @@ def main():
     total_jindou_reward = 0
     retried_accounts = []  # 合并所有重试过的账号，包括最终重试
     
-    # 记录失败的账号
+    # 记录失败的账号和密码错误的账号
     failed_accounts = []
+    password_error_accounts = []
     
     for result in all_results:
         account_index = result['account_index']
@@ -1239,15 +1282,24 @@ def main():
         if retry_count > 0 or is_final_retry:
             retried_accounts.append(account_index)
         
-        # 检查是否有失败情况
-        if not result['oshwhub_success'] or not result['jindou_success']:
+        # 检查是否有失败情况（排除密码错误）
+        if (not result['oshwhub_success'] or not result['jindou_success']) and not result['password_error']:
             failed_accounts.append(account_index)
+        
+        # 收集密码错误的账号
+        if result['password_error']:
+            password_error_accounts.append(account_index)
         
         retry_label = ""
         if retry_count > 0:
              retry_label = f" [重试{retry_count}次]"
         elif is_final_retry:
             retry_label = " [最终重试]"
+        
+        # 如果密码错误，特殊显示
+        if result['password_error']:
+            log(f"账号 {account_index} (未知) 详细结果: [密码错误]")
+            continue
         
         log(f"账号 {account_index} ({nickname}) 详细结果:{retry_label}")
         log(f"  ├── 开源平台: {result['oshwhub_status']}")
@@ -1303,11 +1355,15 @@ def main():
     jindou_rate = (jindou_success_count / total_accounts) * 100
     
     log(f"  ├── 开源平台成功率: {oshwhub_rate:.1f}%")
-    log(f"  └── 金豆签到成功率: {jindou_rate:.1f}%")
+    log(f"  ├── 金豆签到成功率: {jindou_rate:.1f}%")
+    
+    # 密码错误的账号
+    if password_error_accounts:
+        log(f"  ⚠ 密码错误的账号: {', '.join(map(str, password_error_accounts))}")
     
     # 失败账号列表
-    failed_oshwhub = [r['account_index'] for r in all_results if not r['oshwhub_success']]
-    failed_jindou = [r['account_index'] for r in all_results if not r['jindou_success']]
+    failed_oshwhub = [r['account_index'] for r in all_results if not r['oshwhub_success'] and not r['password_error']]
+    failed_jindou = [r['account_index'] for r in all_results if not r['jindou_success'] and not r['password_error']]
     
     if failed_oshwhub:
         log(f"  ⚠ 开源平台失败账号: {', '.join(map(str, failed_oshwhub))}")
@@ -1315,7 +1371,7 @@ def main():
     if failed_jindou:
         log(f"  ⚠ 金豆签到失败账号: {', '.join(map(str, failed_jindou))}")
     
-    if not failed_oshwhub and not failed_jindou:
+    if not failed_oshwhub and not failed_jindou and not password_error_accounts:
         log("  🎉 所有账号全部签到成功!")
     
     log("=" * 70)
@@ -1323,7 +1379,7 @@ def main():
     # 推送总结
     push_summary()
     
-    # 根据失败退出标志决定退出码
+    # 根据失败退出标志决定退出码（密码错误不算失败）
     if enable_failure_exit and failed_accounts:
         log(f"❌ 检测到失败的账号: {', '.join(map(str, failed_accounts))}")
         log("❌ 由于失败退出功能已开启，返回报错退出码以获得邮件提醒")
