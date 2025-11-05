@@ -606,6 +606,20 @@ def ensure_login_page(driver, account_index):
     
     return False
 
+def detect_password_error(driver, account_index):
+    """轮询检测密码错误提示"""
+    error_xpath = '//*[contains(text(), "账号或密码不正确")]'
+    poll_interval = 0.1
+    max_polls = 30  # 3 seconds
+    
+    for _ in range(max_polls):
+        elements = driver.find_elements(By.XPATH, error_xpath)
+        if len(elements) > 0:
+            return True
+        time.sleep(poll_interval)
+    
+    return False
+
 def sign_in_account(username, password, account_index, total_accounts, retry_count=0, is_final_retry=False):
     """为单个账号执行完整的签到流程（包含重试机制）"""
     retry_label = ""
@@ -711,19 +725,15 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
             result['oshwhub_status'] = '登录失败'
             return result
 
-        # 立即检测密码错误（点击登录后）
-        try:
-            WebDriverWait(driver, 3).until(
-                EC.visibility_of_element_located((By.XPATH, '//*[contains(text(), "账号或密码不正确")]'))
-            )
+        # 立即检测密码错误（点击登录后，使用轮询）
+        if detect_password_error(driver, account_index):
             log(f"账号 {account_index} - ❌ 检测到账号或密码错误，跳过此账号")
             result['oshwhub_status'] = '密码错误'
             result['password_error'] = True
             return result
-        except:
-            pass  # 没有错误，继续
 
         # 处理滑块验证
+        slider_handled = False
         try:
             WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, ".btn_slide")))
             slider = wait.until(
@@ -758,19 +768,15 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
             actions.release().perform()
             log(f"账号 {account_index} - 滑块拖动完成")
             WebDriverWait(driver, 10).until(lambda d: "oshwhub.com" in d.current_url and "passport.jlc.com" not in d.current_url)
+            slider_handled = True
             
             # 滑块验证后再次检测密码错误
-            try:
-                WebDriverWait(driver, 3).until(
-                    EC.visibility_of_element_located((By.XPATH, '//*[contains(text(), "账号或密码不正确")]'))
-                )
+            if detect_password_error(driver, account_index):
                 log(f"账号 {account_index} - ❌ 检测到账号或密码错误，跳过此账号")
                 result['oshwhub_status'] = '密码错误'
                 result['password_error'] = True
                 return result
-            except:
-                pass  # 没有错误，继续
-            
+                
         except Exception as e:
             log(f"账号 {account_index} - 滑块验证处理: {e}")
 
