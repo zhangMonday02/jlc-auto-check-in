@@ -1406,7 +1406,7 @@ def main():
     if not failed_oshwhub and not failed_jindou and not password_error_accounts:
         log("  🎉 所有账号全部签到成功!")
     elif password_error_accounts and not failed_oshwhub and not failed_jindou:
-        log("   ⚠除了密码错误账号，其他账号全部签到成功!")
+        log("  ⚠除了密码错误账号，其他账号全部签到成功!")
     
     log("=" * 70)
     
