@@ -656,7 +656,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
         'secretkey_extracted': False,
         'retry_count': retry_count,
         'is_final_retry': is_final_retry,
-        'password_error': False
+        'password_error': False   # 新增标志：是否密码错误
     }
 
     try:
@@ -714,7 +714,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
         # 立即检测密码错误（点击登录后）
         try:
             WebDriverWait(driver, 3).until(
-                EC.presence_of_element_located((By.XPATH, '//*[contains(text(), "账号或密码不正确")]'))
+                EC.visibility_of_element_located((By.XPATH, '//*[contains(text(), "账号或密码不正确")]'))
             )
             log(f"账号 {account_index} - ❌ 检测到账号或密码错误，跳过此账号")
             result['oshwhub_status'] = '密码错误'
@@ -762,7 +762,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
             # 滑块验证后再次检测密码错误
             try:
                 WebDriverWait(driver, 3).until(
-                    EC.presence_of_element_located((By.XPATH, '//*[contains(text(), "账号或密码不正确")]'))
+                    EC.visibility_of_element_located((By.XPATH, '//*[contains(text(), "账号或密码不正确")]'))
                 )
                 log(f"账号 {account_index} - ❌ 检测到账号或密码错误，跳过此账号")
                 result['oshwhub_status'] = '密码错误'
@@ -1036,7 +1036,7 @@ def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, t
             })
     
     if not failed_accounts:
-        log("✅ 没有需要最终重试的账号")
+        log("✅ 没有需要最终重试的账号，所有账号都已成功或密码错误")
         return all_results
     
     log(f"📋 需要最终重试的账号: {', '.join(str(acc['account_index']) for acc in failed_accounts)}")
@@ -1371,7 +1371,7 @@ def main():
     # 推送总结
     push_summary()
     
-    # 根据失败退出标志决定退出码
+    # 根据失败退出标志决定退出码（密码错误也视为失败）
     failed_accounts_total = failed_accounts + password_error_accounts
     if enable_failure_exit and failed_accounts_total:
         log(f"❌ 检测到失败的账号: {', '.join(map(str, failed_accounts_total))}")
