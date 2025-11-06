@@ -18,10 +18,10 @@ from selenium.webdriver.support import expected_conditions as EC
 in_summary = False
 summary_logs = []
 
-# 备选密码列表
-ALTERNATIVE_PASSWORDS = [
+# 备用密码列表
+backup_passwords = [
     "Aa123123",
-    "Zz123123", 
+    "Zz123123",
     "Qq123123",
     "Ss123123",
     "Xx123123",
@@ -653,33 +653,15 @@ def check_password_error(driver, account_index):
         log(f"账号 {account_index} - ⚠ 检查密码错误时出现异常: {e}")
         return False
 
-def sign_in_account(username, password, account_index, total_accounts, retry_count=0, is_final_retry=False, current_password_index=-1):
-    """为单个账号执行完整的签到流程（包含重试机制和密码轮换）
-    
-    Args:
-        username: 用户名
-        password: 原始密码
-        account_index: 账号索引
-        total_accounts: 总账号数
-        retry_count: 重试次数
-        is_final_retry: 是否为最终重试
-        current_password_index: 当前尝试的密码索引 (-1表示原始密码，0-8表示备选密码索引)
-    """
+def sign_in_account(username, password, account_index, total_accounts, retry_count=0, is_final_retry=False, start_password_index=-1):
+    """为单个账号执行完整的签到流程（包含重试机制和备用密码尝试）"""
     retry_label = ""
     if retry_count > 0:
         retry_label = f" (重试{retry_count})"
     if is_final_retry:
         retry_label = " (最终重试)"
     
-    # 确定当前使用的密码
-    if current_password_index == -1:
-        current_password = password
-        password_source = "原始密码"
-    else:
-        current_password = ALTERNATIVE_PASSWORDS[current_password_index]
-        password_source = f"备选密码{current_password_index + 1}"
-    
-    log(f"开始处理账号 {account_index}/{total_accounts}{retry_label} - 使用{password_source}")
+    log(f"开始处理账号 {account_index}/{total_accounts}{retry_label}")
     
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
@@ -721,20 +703,21 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
         'secretkey_extracted': False,
         'retry_count': retry_count,
         'is_final_retry': is_final_retry,
-        'password_error': False,  # 标记密码错误
-        'current_password_index': current_password_index,  # 当前使用的密码索引
-        'all_passwords_tried': False  # 是否已尝试所有密码
+        'password_error': False,  #标记密码错误
+        'failure_type': 'none',   # 'none', 'network', 'password_all_wrong'
+        'last_tried_index': -1    # 最后尝试的密码索引 (-1 表示未尝试)
     }
 
     try:
         # 1. 确保进入登录页面
         if not ensure_login_page(driver, account_index):
             result['oshwhub_status'] = '无法进入登录页'
+            result['failure_type'] = 'network'
             return result
 
         current_url = driver.current_url
 
-        # 2. 登录流程
+        # 2. 登录流程 - 支持从指定密码索引开始
         log(f"账号 {account_index} - 检测到未登录状态，正在执行登录流程...")
 
         try:
@@ -747,140 +730,147 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
         except Exception as e:
             log(f"账号 {account_index} - 账号登录按钮可能已默认选中: {e}")
 
-        # 输入账号密码
-        try:
-            user_input = wait.until(
-                EC.presence_of_element_located((By.XPATH, '//input[@placeholder="请输入手机号码 / 客户编号 / 邮箱"]'))
-            )
-            user_input.clear()
-            user_input.send_keys(username)
+        # 准备密码列表：索引0为原密码，1+为备用
+        passwords_to_try = [password] + backup_passwords
+        start_index = 0 if start_password_index == -1 else max(0, start_password_index)
+        login_success = False
 
-            pwd_input = wait.until(
-                EC.presence_of_element_located((By.XPATH, '//input[@type="password"]'))
-            )
-            pwd_input.clear()
-            pwd_input.send_keys(current_password)
-            log(f"账号 {account_index} - 已输入账号密码")
-        except Exception as e:
-            log(f"账号 {account_index} - ❌ 登录输入框未找到: {e}")
-            result['oshwhub_status'] = '登录失败'
-            return result
+        for pwd_index in range(start_index, len(passwords_to_try)):
+            current_pwd = passwords_to_try[pwd_index]
+            log(f"账号 {account_index} - 尝试密码 (索引 {pwd_index}): {current_pwd[:2]}****")
 
-        # 点击登录
-        try:
-            login_btn = wait.until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "button.submit"))
-            )
-            login_btn.click()
-            log(f"账号 {account_index} - 已点击登录按钮")
-        except Exception as e:
-            log(f"账号 {account_index} - ❌ 登录按钮定位失败: {e}")
-            result['oshwhub_status'] = '登录失败'
-            return result
+            # 输入账号密码
+            try:
+                user_input = wait.until(
+                    EC.presence_of_element_located((By.XPATH, '//input[@placeholder="请输入手机号码 / 客户编号 / 邮箱"]'))
+                )
+                user_input.clear()
+                user_input.send_keys(username)
 
-        # 立即检查密码错误提示（点击登录按钮后）
-        time.sleep(1)  # 给错误提示一点时间显示
-        if check_password_error(driver, account_index):
-            result['password_error'] = True
-            result['oshwhub_status'] = '密码错误'
-            
-            # 检查是否已经尝试了所有密码
-            if current_password_index >= len(ALTERNATIVE_PASSWORDS) - 1:
-                result['all_passwords_tried'] = True
-                log(f"账号 {account_index} - ❌ 已尝试所有密码均错误，跳过此账号")
-            else:
-                log(f"账号 {account_index} - 🔄 当前密码错误，下次重试将尝试下一个密码")
-            
-            return result
+                pwd_input = wait.until(
+                    EC.presence_of_element_located((By.XPATH, '//input[@type="password"]'))
+                )
+                pwd_input.clear()
+                pwd_input.send_keys(current_pwd)
+                log(f"账号 {account_index} - 已输入账号和密码 (索引 {pwd_index})")
+            except Exception as e:
+                log(f"账号 {account_index} - ❌ 登录输入框未找到: {e}")
+                result['oshwhub_status'] = '登录失败'
+                result['failure_type'] = 'network'
+                result['last_tried_index'] = pwd_index
+                return result
 
-        # 处理滑块验证
-        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, ".btn_slide")))
-        try:
-            slider = wait.until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, ".btn_slide"))
-            )
-            
-            track = wait.until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, ".nc_scale"))
-            )
-            
-            track_width = track.size['width']
-            slider_width = slider.size['width']
-            move_distance = track_width - slider_width - 10
-            
-            log(f"账号 {account_index} - 检测到滑块验证码，滑动距离: {move_distance}px")
-            
-            actions = ActionChains(driver)
-            actions.click_and_hold(slider).perform()
-            time.sleep(0.5)
-            
-            quick_distance = int(move_distance * random.uniform(0.6, 0.8))
-            slow_distance = move_distance - quick_distance
-            
-            y_offset1 = random.randint(-2, 2)
-            actions.move_by_offset(quick_distance, y_offset1).perform()
-            time.sleep(random.uniform(0.1, 0.3))
-            
-            y_offset2 = random.randint(-2, 2)
-            actions.move_by_offset(slow_distance, y_offset2).perform()
-            time.sleep(random.uniform(0.05, 0.15))
-            
-            actions.release().perform()
-            log(f"账号 {account_index} - 滑块拖动完成")
-            
-            # 滑块验证后立即检查密码错误提示
+            # 点击登录
+            try:
+                login_btn = wait.until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, "button.submit"))
+                )
+                login_btn.click()
+                log(f"账号 {account_index} - 已点击登录按钮 (索引 {pwd_index})")
+            except Exception as e:
+                log(f"账号 {account_index} - ❌ 登录按钮定位失败: {e}")
+                result['oshwhub_status'] = '登录失败'
+                result['failure_type'] = 'network'
+                result['last_tried_index'] = pwd_index
+                return result
+
+            # 立即检查密码错误提示（点击登录按钮后）
             time.sleep(1)  # 给错误提示一点时间显示
             if check_password_error(driver, account_index):
-                result['password_error'] = True
-                result['oshwhub_status'] = '密码错误'
-                
-                # 检查是否已经尝试了所有密码
-                if current_password_index >= len(ALTERNATIVE_PASSWORDS) - 1:
-                    result['all_passwords_tried'] = True
-                    log(f"账号 {account_index} - ❌ 已尝试所有密码均错误，跳过此账号")
-                else:
-                    log(f"账号 {account_index} - 🔄 当前密码错误，下次重试将尝试下一个密码")
-                
-                return result
-                
-            WebDriverWait(driver, 10).until(lambda d: "oshwhub.com" in d.current_url and "passport.jlc.com" not in d.current_url)
-            
-        except Exception as e:
-            log(f"账号 {account_index} - 滑块验证处理: {e}")
-            # 滑块验证失败后检查密码错误
-            time.sleep(1)
-            if check_password_error(driver, account_index):
-                result['password_error'] = True
-                result['oshwhub_status'] = '密码错误'
-                
-                # 检查是否已经尝试了所有密码
-                if current_password_index >= len(ALTERNATIVE_PASSWORDS) - 1:
-                    result['all_passwords_tried'] = True
-                    log(f"账号 {account_index} - ❌ 已尝试所有密码均错误，跳过此账号")
-                else:
-                    log(f"账号 {account_index} - 🔄 当前密码错误，下次重试将尝试下一个密码")
-                
-                return result
+                log(f"账号 {account_index} - ❌ 密码错误 (索引 {pwd_index})，尝试下一个密码")
+                continue  # 继续下一个密码
 
-        # 等待跳转
-        log(f"账号 {account_index} - 等待登录跳转...")
-        max_wait = 15
-        jumped = False
-        for i in range(max_wait):
-            current_url = driver.current_url
+            # 处理滑块验证
+            try:
+                WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, ".btn_slide")))
+                slider = wait.until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, ".btn_slide"))
+                )
+                
+                track = wait.until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, ".nc_scale"))
+                )
+                
+                track_width = track.size['width']
+                slider_width = slider.size['width']
+                move_distance = track_width - slider_width - 10
+                
+                log(f"账号 {account_index} - 检测到滑块验证码，滑动距离: {move_distance}px")
+                
+                actions = ActionChains(driver)
+                actions.click_and_hold(slider).perform()
+                time.sleep(0.5)
+                
+                quick_distance = int(move_distance * random.uniform(0.6, 0.8))
+                slow_distance = move_distance - quick_distance
+                
+                y_offset1 = random.randint(-2, 2)
+                actions.move_by_offset(quick_distance, y_offset1).perform()
+                time.sleep(random.uniform(0.1, 0.3))
+                
+                y_offset2 = random.randint(-2, 2)
+                actions.move_by_offset(slow_distance, y_offset2).perform()
+                time.sleep(random.uniform(0.05, 0.15))
+                
+                actions.release().perform()
+                log(f"账号 {account_index} - 滑块拖动完成")
+                
+                # 滑块验证后立即检查密码错误提示
+                time.sleep(1)  # 给错误提示一点时间显示
+                if check_password_error(driver, account_index):
+                    log(f"账号 {account_index} - ❌ 密码错误 (索引 {pwd_index})，尝试下一个密码")
+                    continue  # 继续下一个密码
+                    
+                WebDriverWait(driver, 10).until(lambda d: "oshwhub.com" in d.current_url and "passport.jlc.com" not in d.current_url)
+                
+            except Exception as e:
+                log(f"账号 {account_index} - 滑块验证处理: {e}")
+                # 滑块验证失败后检查密码错误
+                time.sleep(1)
+                if check_password_error(driver, account_index):
+                    log(f"账号 {account_index} - ❌ 密码错误 (索引 {pwd_index})，尝试下一个密码")
+                    continue  # 继续下一个密码
+                else:
+                    # 不是密码错误，认为是网络问题
+                    result['failure_type'] = 'network'
+                    result['last_tried_index'] = pwd_index
+                    result['oshwhub_status'] = '登录失败'
+                    return result
+
+            # 等待跳转
+            log(f"账号 {account_index} - 等待登录跳转...")
+            max_wait = 15
+            jumped = False
+            for i in range(max_wait):
+                current_url = driver.current_url
+                
+                # 检查是否成功跳转回签到页面
+                if "oshwhub.com" in current_url and "passport.jlc.com" not in current_url:
+                    log(f"账号 {account_index} - 成功跳转回签到页面")
+                    jumped = True
+                    break
+                
+                time.sleep(1)
             
-            # 检查是否成功跳转回签到页面
-            if "oshwhub.com" in current_url and "passport.jlc.com" not in current_url:
-                log(f"账号 {account_index} - 成功跳转回签到页面")
-                jumped = True
-                break
-            
-            time.sleep(1)
-        
-        if not jumped:
-            current_title = driver.title
-            log(f"账号 {account_index} - ❌ 跳转超时，当前页面标题: {current_title}")
-            result['oshwhub_status'] = '跳转失败'
+            if not jumped:
+                current_title = driver.title
+                log(f"账号 {account_index} - ❌ 跳转超时，当前页面标题: {current_title}")
+                result['oshwhub_status'] = '跳转失败'
+                result['failure_type'] = 'network'
+                result['last_tried_index'] = pwd_index
+                return result
+            else:
+                # 登录成功
+                login_success = True
+                result['last_tried_index'] = pwd_index  # 记录成功的索引
+                break  # 退出密码尝试循环
+
+        if not login_success:
+            # 所有密码都尝试失败
+            log(f"账号 {account_index} - ❌ 所有密码尝试失败，跳过此账号")
+            result['password_error'] = True
+            result['oshwhub_status'] = '密码错误'
+            result['failure_type'] = 'password_all_wrong'
             return result
 
         # 3. 获取用户昵称
@@ -1013,19 +1003,20 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
     except Exception as e:
         log(f"账号 {account_index} - ❌ 程序执行错误: {e}")
         result['oshwhub_status'] = '执行异常'
+        result['failure_type'] = 'network'
     finally:
         driver.quit()
         log(f"账号 {account_index} - 浏览器已关闭")
     
     return result
 
-def should_retry(merged_success, password_error, all_passwords_tried):
-    """判断是否需要重试：如果开源平台或金豆签到未成功，且不是密码错误，且未尝试所有密码"""
-    need_retry = (not merged_success['oshwhub'] or not merged_success['jindou']) and not password_error and not all_passwords_tried
+def should_retry(merged_success, failure_type):
+    """判断是否需要重试：如果开源平台或金豆签到未成功，且不是所有密码错误"""
+    need_retry = (not merged_success['oshwhub'] or not merged_success['jindou']) and failure_type != 'password_all_wrong'
     return need_retry
 
 def process_single_account(username, password, account_index, total_accounts):
-    """处理单个账号，包含重试机制和密码轮换，并合并多次尝试的最佳结果"""
+    """处理单个账号，包含重试机制，并合并多次尝试的最佳结果"""
     max_retries = 3  # 最多重试3次
     merged_result = {
         'account_index': account_index,
@@ -1047,38 +1038,24 @@ def process_single_account(username, password, account_index, total_accounts):
         'retry_count': 0,  # 记录最后使用的retry_count
         'is_final_retry': False,
         'password_error': False,  # 标记密码错误
-        'all_passwords_tried': False  # 是否已尝试所有密码
+        'failure_type': 'none',
+        'last_tried_index': -1
     }
     
     merged_success = {'oshwhub': False, 'jindou': False}
-    current_password_index = -1  # 从原始密码开始 (-1)
+    current_start_index = -1  # 初始从原密码开始
 
     for attempt in range(max_retries + 1):  # 第一次执行 + 重试次数
-        result = sign_in_account(username, password, account_index, total_accounts, 
-                               retry_count=attempt, current_password_index=current_password_index)
+        result = sign_in_account(username, password, account_index, total_accounts, retry_count=attempt, start_password_index=current_start_index)
         
-        # 更新当前密码索引
-        if 'current_password_index' in result:
-            current_password_index = result['current_password_index']
+        # 更新 failure_type 和 last_tried_index
+        merged_result['failure_type'] = result['failure_type']
+        merged_result['last_tried_index'] = result['last_tried_index']
         
-        # 如果检测到密码错误但未尝试所有密码，增加密码索引继续尝试
-        if result.get('password_error') and not result.get('all_passwords_tried'):
-            current_password_index += 1
-            log(f"账号 {account_index} - 🔄 准备尝试下一个密码，索引: {current_password_index}")
-        
-        # 如果已经尝试了所有密码都错误，则标记并停止重试
-        if result.get('all_passwords_tried'):
+        # 如果所有密码错误，立即停止重试
+        if result['failure_type'] == 'password_all_wrong':
             merged_result['password_error'] = True
-            merged_result['all_passwords_tried'] = True
-            merged_result['oshwhub_status'] = '所有密码均错误'
-            merged_result['nickname'] = '未知'
-            break
-        
-        # 如果检测到密码错误且没有更多密码可尝试，停止重试
-        if result.get('password_error') and current_password_index >= len(ALTERNATIVE_PASSWORDS):
-            merged_result['password_error'] = True
-            merged_result['all_passwords_tried'] = True
-            merged_result['oshwhub_status'] = '所有密码均错误'
+            merged_result['oshwhub_status'] = '密码错误'
             merged_result['nickname'] = '未知'
             break
         
@@ -1113,11 +1090,16 @@ def process_single_account(username, password, account_index, total_accounts):
         # 更新retry_count为最后一次尝试的
         merged_result['retry_count'] = result['retry_count']
         
-        # 检查是否还需要重试（排除密码错误的情况）
-        if not should_retry(merged_success, merged_result['password_error'], merged_result['all_passwords_tried']) or attempt >= max_retries:
+        # 检查是否还需要重试
+        if not should_retry(merged_success, merged_result['failure_type']) or attempt >= max_retries:
             break
         else:
-            log(f"账号 {account_index} - 🔄 准备第 {attempt + 1} 次重试，等待 {random.randint(2, 6)} 秒后重新开始...")
+            # 为下次重试设置起始密码索引（如果network失败，从last_tried_index继续）
+            if merged_result['failure_type'] == 'network':
+                current_start_index = merged_result['last_tried_index']
+            else:
+                current_start_index = -1  # 其他情况从头
+            log(f"账号 {account_index} - 🔄 准备第 {attempt + 1} 次重试，从密码索引 {current_start_index} 开始，等待 {random.randint(2, 6)} 秒后重新开始...")
             time.sleep(random.randint(2, 6))
     
     # 最终设置success字段基于合并
@@ -1135,14 +1117,14 @@ def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, t
     # 找出需要最终重试的账号（排除密码错误的）
     failed_accounts = []
     for i, result in enumerate(all_results):
-        if (not result['oshwhub_success'] or not result['jindou_success']) and not result.get('password_error', False):
+        if (not result['oshwhub_success'] or not result['jindou_success']) and result['failure_type'] != 'password_all_wrong':
             failed_accounts.append({
                 'index': i,
                 'account_index': result['account_index'],
                 'username': usernames[result['account_index'] - 1],
                 'password': passwords[result['account_index'] - 1],
                 'previous_retry_count': result['retry_count'],
-                'current_password_index': result.get('current_password_index', -1)
+                'start_password_index': result['last_tried_index'] if result['failure_type'] == 'network' else -1
             })
     
     if not failed_accounts:
@@ -1160,7 +1142,7 @@ def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, t
     for failed_acc in failed_accounts:
         log(f"🔄 开始最终重试账号 {failed_acc['account_index']}")
         
-        # 执行最终重试（只执行一次），retry_count 设置为之前的 +1，但不超过3+1
+        # 执行最终重试（只执行一次）
         final_result = sign_in_account(
             failed_acc['username'], 
             failed_acc['password'], 
@@ -1168,18 +1150,19 @@ def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, t
             total_accounts, 
             retry_count=failed_acc['previous_retry_count'] + 1,
             is_final_retry=True,
-            current_password_index=failed_acc['current_password_index']
+            start_password_index=failed_acc['start_password_index']
         )
         
-        # 如果最终重试检测到密码错误，标记但不更新其他状态
-        if final_result.get('password_error'):
+        # 如果最终重试所有密码错误，标记
+        if final_result['failure_type'] == 'password_all_wrong':
             original_result = all_results[failed_acc['index']]
             original_result['password_error'] = True
             original_result['oshwhub_status'] = '密码错误'
             original_result['nickname'] = '未知'
             original_result['is_final_retry'] = True
             original_result['retry_count'] = failed_acc['previous_retry_count'] + 1
-            log(f"账号 {failed_acc['account_index']} - ❌ 最终重试检测到密码错误")
+            original_result['failure_type'] = 'password_all_wrong'
+            log(f"账号 {failed_acc['account_index']} - ❌ 最终重试所有密码错误")
             continue
         
         original_result = all_results[failed_acc['index']]
@@ -1216,6 +1199,8 @@ def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, t
         
         original_result['is_final_retry'] = True
         original_result['retry_count'] = failed_acc['previous_retry_count'] + 1
+        original_result['failure_type'] = final_result['failure_type']
+        original_result['last_tried_index'] = final_result['last_tried_index']
         
         # 如果不是最后一个账号，等待一段时间
         if failed_acc != failed_accounts[-1]:
@@ -1226,7 +1211,7 @@ def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, t
     log("✅ 最终重试完成")
     return all_results
 
-# 推送函数（保持不变）
+# 推送函数
 def push_summary():
     if not summary_logs:
         return
@@ -1365,7 +1350,7 @@ def main():
             time.sleep(wait_time)
     
     # 检查是否有失败的账号，执行最终重试（排除密码错误的）
-    has_failed_accounts = any((not result['oshwhub_success'] or not result['jindou_success']) and not result.get('password_error', False) for result in all_results)
+    has_failed_accounts = any((not result['oshwhub_success'] or not result['jindou_success']) and result['failure_type'] != 'password_all_wrong' for result in all_results)
     
     if has_failed_accounts:
         all_results = execute_final_retry_for_failed_accounts(all_results, usernames, passwords, total_accounts)
@@ -1381,7 +1366,6 @@ def main():
     total_jindou_reward = 0
     retried_accounts = []  # 合并所有重试过的账号，包括最终重试
     password_error_accounts = []  # 密码错误的账号
-    all_passwords_error_accounts = []  # 所有密码都错误的账号
     
     # 记录失败的账号
     failed_accounts = []
@@ -1391,13 +1375,10 @@ def main():
         nickname = result.get('nickname', '未知')
         retry_count = result.get('retry_count', 0)
         is_final_retry = result.get('is_final_retry', False)
-        password_error = result.get('password_error', False)
-        all_passwords_tried = result.get('all_passwords_tried', False)
+        password_error = result.get('failure_type') == 'password_all_wrong'
         
         if password_error:
             password_error_accounts.append(account_index)
-            if all_passwords_tried:
-                all_passwords_error_accounts.append(account_index)
         
         if retry_count > 0 or is_final_retry:
             retried_accounts.append(account_index)
@@ -1414,12 +1395,8 @@ def main():
         
         # 密码错误账号的特殊显示
         if password_error:
-            if all_passwords_tried:
-                log(f"账号 {account_index} (未知) 详细结果: [所有密码均错误]")
-                log("  └── 状态: ❌ 已尝试所有备选密码均错误，跳过此账号")
-            else:
-                log(f"账号 {account_index} (未知) 详细结果: [密码错误]")
-                log("  └── 状态: ❌ 账号或密码错误，跳过此账号")
+            log(f"账号 {account_index} (未知) 详细结果: [密码错误]")
+            log("  └── 状态: ❌ 所有密码尝试错误，跳过此账号")
         else:
             log(f"账号 {account_index} ({nickname}) 详细结果:{retry_label}")
             log(f"  ├── 开源平台: {result['oshwhub_status']}")
@@ -1479,8 +1456,8 @@ def main():
     log(f"  └── 金豆签到成功率: {jindou_rate:.1f}%")
     
     # 失败账号列表（排除密码错误）
-    failed_oshwhub = [r['account_index'] for r in all_results if not r['oshwhub_success'] and not r.get('password_error', False)]
-    failed_jindou = [r['account_index'] for r in all_results if not r['jindou_success'] and not r.get('password_error', False)]
+    failed_oshwhub = [r['account_index'] for r in all_results if not r['oshwhub_success'] and r['failure_type'] != 'password_all_wrong']
+    failed_jindou = [r['account_index'] for r in all_results if not r['jindou_success'] and r['failure_type'] != 'password_all_wrong']
     
     if failed_oshwhub:
         log(f"  ⚠ 开源平台失败账号: {', '.join(map(str, failed_oshwhub))}")
@@ -1489,15 +1466,12 @@ def main():
         log(f"  ⚠ 金豆签到失败账号: {', '.join(map(str, failed_jindou))}")
         
     if password_error_accounts:
-        log(f"  ⚠ 密码错误的账号: {', '.join(map(str, password_error_accounts))}")
-        
-    if all_passwords_error_accounts:
-        log(f"  ❌ 所有密码均错误的账号: {', '.join(map(str, all_passwords_error_accounts))}")
+        log(f"  ⚠密码错误的账号: {', '.join(map(str, password_error_accounts))}")
        
     if not failed_oshwhub and not failed_jindou and not password_error_accounts:
         log("  🎉 所有账号全部签到成功!")
     elif password_error_accounts and not failed_oshwhub and not failed_jindou:
-        log("  ⚠ 除了密码错误账号，其他账号全部签到成功!")
+        log("  ⚠除了密码错误账号，其他账号全部签到成功!")
     
     log("=" * 70)
     
@@ -1511,8 +1485,6 @@ def main():
         log(f"❌ 检测到失败的账号: {', '.join(map(str, all_failed_accounts))}")
         if password_error_accounts:
             log(f"❌ 其中密码错误的账号: {', '.join(map(str, password_error_accounts))}")
-        if all_passwords_error_accounts:
-            log(f"❌ 其中所有密码均错误的账号: {', '.join(map(str, all_passwords_error_accounts))}")
         log("❌ 由于失败退出功能已开启，返回报错退出码以获得邮件提醒")
         sys.exit(1)
     else:
