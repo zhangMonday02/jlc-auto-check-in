@@ -29,7 +29,8 @@ jobs:
       - name: 添加上游仓库
         run: |
           if ! git remote | grep -q upstream; then
-            git remote add upstream https://github.com/zhangMonday/jlc-auto-check-in.git
+            git remote add upstream https://github.com/zhangMonday/PCBfactory-auto-check-in.git
+          
           fi
 
       - name: 切换到 main 分支
