@@ -37,6 +37,12 @@ def format_nickname(nickname):
     else:
         return f"{nickname[0]}{'*' * (len(nickname)-2)}{nickname[-1]}"
 
+def desensitize_password(pwd):
+    """脱敏密码显示"""
+    if len(pwd) <= 3:
+        return pwd
+    return pwd[:3] + '*****'
+
 def with_retry(func, max_retries=5, delay=1):
     """如果函数返回None或抛出异常，静默重试"""
     def wrapper(*args, **kwargs):
@@ -725,11 +731,11 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
             # 如果是从备用密码开始，重置为备用密码
             current_backup_index = start_backup_index
             current_password = backup_passwords[current_backup_index]
-            log(f"账号 {account_index} - 从备用密码索引 {start_backup_index} 继续尝试: {current_password}")
+            log(f"账号 {account_index} - 从备用密码索引 {start_backup_index} 继续尝试: {desensitize_password(current_password)}")
 
         while not logged_in:
             try:
-                # 切换到账号登录（每次尝试密码前刷新页面并选择账号登录）
+                # 切换到账号登录（每次尝试尝试密码前刷新页面并选择账号登录）
                 driver.refresh()
                 WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
                 phone_btn = wait.until(
@@ -790,7 +796,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
                     return result
 
                 current_password = backup_passwords[current_backup_index]
-                log(f"账号 {account_index} - ❌ 密码错误，尝试下一个备用密码: {current_password}")
+                log(f"账号 {account_index} - ❌ 密码错误，尝试下一个备用密码: {desensitize_password(current_password)}")
                 continue  # 继续尝试下一个密码
 
             # 处理滑块验证
@@ -844,7 +850,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
                         return result
 
                     current_password = backup_passwords[current_backup_index]
-                    log(f"账号 {account_index} - ❌ 密码错误，尝试下一个备用密码: {current_password}")
+                    log(f"账号 {account_index} - ❌ 密码错误，尝试下一个备用密码: {desensitize_password(current_password)}")
                     continue
 
                 WebDriverWait(driver, 10).until(lambda d: "oshwhub.com" in d.current_url and "passport.jlc.com" not in d.current_url)
@@ -867,7 +873,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
                         return result
 
                     current_password = backup_passwords[current_backup_index]
-                    log(f"账号 {account_index} - ❌ 密码错误，尝试下一个备用密码: {current_password}")
+                    log(f"账号 {account_index} - ❌ 密码错误，尝试下一个备用密码: {desensitize_password(current_password)}")
                     continue
                 else:
                     # 非密码错误，可能是网络等，设置重试从当前索引
@@ -909,7 +915,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
                         return result
 
                     current_password = backup_passwords[current_backup_index]
-                    log(f"账号 {account_index} - ❌ 密码错误，尝试下一个备用密码: {current_password}")
+                    log(f"账号 {account_index} - ❌ 密码错误，尝试下一个备用密码: {desensitize_password(current_password)}")
                     continue
                 else:
                     # 非密码错误失败
