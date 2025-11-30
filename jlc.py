@@ -475,6 +475,7 @@ def click_gift_buttons(driver, account_index):
                 if last_day:
                     driver.refresh()
                     WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+                    time.sleep(12)
                 
             except Exception as e:
                 log(f"账号 {account_index} - ⚠ 无法点击7天好礼: {e}")
