@@ -213,3 +213,28 @@ jobs:
       - name: '进行签到流程(账号组8)'
         run: |
           python ./jlc.py "${{ secrets.JLC_USERNAME_8 }}" "${{ secrets.JLC_PASSWORD_8 }}" "${{ secrets.ERROR_8 }}"
+
+    # 第九个签到任务（账号组9）
+  running-9:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: '检出代码'
+        uses: actions/checkout@v3
+      - name: '设置Python环境'
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.7
+      - name: '设置时区为北京时间'
+        run: |
+          sudo timedatectl set-timezone Asia/Shanghai
+          echo "当前时间: $(date)"
+      - name: '安装依赖'
+        run: |
+          pip install --upgrade pip
+          pip install -r ./requirements.txt
+      - name: '准备Chrome驱动'
+        uses: nanasess/setup-chromedriver@v2
+      - name: '进行签到流程(账号组9)'
+        run: |
+          python ./jlc.py "${{ secrets.JLC_USERNAME_9 }}" "${{ secrets.JLC_PASSWORD_9 }}" "${{ secrets.ERROR_9 }}"
+
