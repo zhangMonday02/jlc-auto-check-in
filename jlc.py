@@ -698,7 +698,9 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
         'retry_count': retry_count,
         'is_final_retry': is_final_retry,
         'password_error': False,  #标记密码错误
-        'retry_from_backup_index': -1  # 如果需要重试，从哪个备用密码索引继续，-1表示原密码
+        'retry_from_backup_index': -1,  # 如果需要重试，从哪个备用密码索引继续，-1表示原密码
+        'actual_password': None,  # 实际使用的密码
+        'backup_index': -1  # 使用的备用密码索引，-1表示原密码
     }
 
     backup_passwords = [
@@ -924,7 +926,9 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
                     result['oshwhub_status'] = '跳转失败'
                     return result
 
-        # 如果登录成功，继续后续流程
+        # 如果登录成功，继续后续流程，并记录实际使用的密码和索引
+        result['actual_password'] = current_password
+        result['backup_index'] = current_backup_index
         # 3. 获取用户昵称
         time.sleep(1)
         nickname = get_user_nickname_from_api(driver, account_index)
@@ -1089,7 +1093,9 @@ def process_single_account(username, password, account_index, total_accounts):
         'retry_count': 0,  # 记录最后使用的retry_count
         'is_final_retry': False,
         'password_error': False,  # 标记密码错误
-        'retry_from_backup_index': -1
+        'retry_from_backup_index': -1,
+        'actual_password': None,  # 实际使用的密码
+        'backup_index': -1  # 使用的备用密码索引，-1表示原密码
     }
     
     merged_success = {'oshwhub': False, 'jindou': False}
@@ -1113,6 +1119,9 @@ def process_single_account(username, password, account_index, total_accounts):
             merged_result['final_points'] = result['final_points']
             merged_result['points_reward'] = result['points_reward']
             merged_result['reward_results'] = result['reward_results']  # 合并礼包结果
+            # 更新实际密码信息
+            merged_result['actual_password'] = result['actual_password']
+            merged_result['backup_index'] = result['backup_index']
         
         # 合并金豆结果：如果本次成功且之前未成功，则更新
         if result['jindou_success'] and not merged_success['jindou']:
@@ -1122,6 +1131,10 @@ def process_single_account(username, password, account_index, total_accounts):
             merged_result['final_jindou'] = result['final_jindou']
             merged_result['jindou_reward'] = result['jindou_reward']
             merged_result['has_jindou_reward'] = result['has_jindou_reward']
+            # 更新实际密码信息（如果之前未更新）
+            if merged_result['actual_password'] is None:
+                merged_result['actual_password'] = result['actual_password']
+                merged_result['backup_index'] = result['backup_index']
         
         # 更新其他字段（如果之前未知）
         if merged_result['nickname'] == '未知' and result['nickname'] != '未知':
@@ -1219,6 +1232,9 @@ def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, t
             original_result['final_points'] = final_result['final_points']
             original_result['points_reward'] = final_result['points_reward']
             original_result['reward_results'] = final_result['reward_results']
+            # 更新实际密码信息
+            original_result['actual_password'] = final_result['actual_password']
+            original_result['backup_index'] = final_result['backup_index']
             log(f"✅ 账号 {failed_acc['account_index']} - 开源平台签到成功")
         
         # 更新金豆结果
@@ -1229,6 +1245,10 @@ def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, t
             original_result['final_jindou'] = final_result['final_jindou']
             original_result['jindou_reward'] = final_result['jindou_reward']
             original_result['has_jindou_reward'] = final_result['has_jindou_reward']
+            # 更新实际密码信息（如果之前未更新）
+            if original_result['actual_password'] is None:
+                original_result['actual_password'] = final_result['actual_password']
+                original_result['backup_index'] = final_result['backup_index']
             log(f"✅ 账号 {failed_acc['account_index']} - 金豆签到成功")
         
         # 更新其他信息
@@ -1522,6 +1542,18 @@ def main():
     all_failed_accounts = failed_accounts + password_error_accounts
     if all_failed_accounts:
         push_summary()
+    
+    # 生成 password-changed.txt
+    changed_accounts = [result for result in all_results if result.get('backup_index', -1) >= 0 and not result.get('password_error', False) and result['actual_password'] is not None]
+    if changed_accounts:
+        with open('password-changed.txt', 'w', encoding='utf-8') as f:
+            for result in changed_accounts:
+                username = usernames[result['account_index'] - 1]
+                f.write(f"{username}:{result['actual_password']}\n")
+                f.write(f"# 昵称: {result['nickname']}\n\n")
+        log("✅ 已生成 password-changed.txt 文件")
+    else:
+        log("✅ 没有使用非原密码的账号，无需生成 password-changed.txt")
     
     # 根据失败退出标志决定退出码
     if enable_failure_exit and all_failed_accounts:
