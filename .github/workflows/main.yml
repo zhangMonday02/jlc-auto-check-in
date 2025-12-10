@@ -1,15 +1,14 @@
 name: 嘉立创自动签到主脚本
 
 on:
-  workflow_dispatch:  # 手动触发
+  workflow_dispatch: # 手动触发
   schedule:
-    - cron: '0 05 * * *'
-    - cron: '0 13 * * *'
-    - cron: '0 21 * * *'
-    # 每天北京时间9点运行（UTC时间01点）
-    # 实际运行可能延迟1小时内，取决于GitHub资源
+    - cron: '0 05 * * *'  # 北京时间 13:00
+    - cron: '0 13 * * *'  # 北京时间 21:00
+    - cron: '0 21 * * *'  # 北京时间 05:00
 
-env: # 公共推送环境变量（所有job共享，从secrets读取）
+env:
+  # 公共推送环境变量
   TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
   TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
   WECHAT_WEBHOOK_KEY: ${{ secrets.WECHAT_WEBHOOK_KEY }}
@@ -20,221 +19,123 @@ env: # 公共推送环境变量（所有job共享，从secrets读取）
   CUSTOM_WEBHOOK: ${{ secrets.CUSTOM_WEBHOOK }}
 
 jobs:
-  # 第一个签到任务（账号组1）
-  running-1:
-    runs-on: ubuntu-22.04
+  # 任务1: 数据预处理与分组
+  # 读取 Secret，清洗数据，按50个一组生成矩阵 JSON
+  generate-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: '检出代码'
-        uses: actions/checkout@v3
-      - name: '设置Python环境'
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.7
-      - name: '设置时区为北京时间'
+      - name: 解析账号并分组
+        id: set-matrix
+        env:
+          # 直接读取包含所有账号的大文本 Secret
+          RAW_ACCOUNTS: ${{ secrets.JLC_ACCOUNT }}
+        shell: python
         run: |
-          sudo timedatectl set-timezone Asia/Shanghai
-          echo "当前时间: $(date)"
-      - name: '安装依赖'
-        run: |
-          pip install --upgrade pip
-          pip install -r ./requirements.txt
-      - name: '准备Chrome驱动'
-        uses: nanasess/setup-chromedriver@v2
-      - name: '进行签到流程(账号组1)'
-        run: |
-          python ./jlc.py "${{ secrets.JLC_USERNAME_1 }}" "${{ secrets.JLC_PASSWORD_1 }}" "${{ secrets.ERROR_1 }}"
+          import os
+          import json
+          import math
 
-  # 第二个签到任务（账号组2）
-  running-2:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: '检出代码'
-        uses: actions/checkout@v3
-      - name: '设置Python环境'
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.7
-      - name: '设置时区为北京时间'
-        run: |
-          sudo timedatectl set-timezone Asia/Shanghai
-          echo "当前时间: $(date)"
-      - name: '安装依赖'
-        run: |
-          pip install --upgrade pip
-          pip install -r ./requirements.txt
-      - name: '准备Chrome驱动'
-        uses: nanasess/setup-chromedriver@v2
-      - name: '进行签到流程(账号组2)'
-        run: |
-          python ./jlc.py "${{ secrets.JLC_USERNAME_2 }}" "${{ secrets.JLC_PASSWORD_2 }}" "${{ secrets.ERROR_2 }}"
-
-  # 第三个签到任务（账号组3）
-  running-3:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: '检出代码'
-        uses: actions/checkout@v3
-      - name: '设置Python环境'
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.7
-      - name: '设置时区为北京时间'
-        run: |
-          sudo timedatectl set-timezone Asia/Shanghai
-          echo "当前时间: $(date)"
-      - name: '安装依赖'
-        run: |
-          pip install --upgrade pip
-          pip install -r ./requirements.txt
-      - name: '准备Chrome驱动'
-        uses: nanasess/setup-chromedriver@v2
-      - name: '进行签到流程(账号组3)'
-        run: |
-          python ./jlc.py "${{ secrets.JLC_USERNAME_3 }}" "${{ secrets.JLC_PASSWORD_3 }}" "${{ secrets.ERROR_3 }}"
-
-  # 第四个签到任务（账号组4）
-  running-4:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: '检出代码'
-        uses: actions/checkout@v3
-      - name: '设置Python环境'
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.7
-      - name: '设置时区为北京时间'
-        run: |
-          sudo timedatectl set-timezone Asia/Shanghai
-          echo "当前时间: $(date)"
-      - name: '安装依赖'
-        run: |
-          pip install --upgrade pip
-          pip install -r ./requirements.txt
-      - name: '准备Chrome驱动'
-        uses: nanasess/setup-chromedriver@v2
-      - name: '进行签到流程(账号组4)'
-        run: |
-          python ./jlc.py "${{ secrets.JLC_USERNAME_4 }}" "${{ secrets.JLC_PASSWORD_4 }}" "${{ secrets.ERROR_4 }}"
-
-  # 第五个签到任务（账号组5）
-  running-5:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: '检出代码'
-        uses: actions/checkout@v3
-      - name: '设置Python环境'
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.7
-      - name: '设置时区为北京时间'
-        run: |
-          sudo timedatectl set-timezone Asia/Shanghai
-          echo "当前时间: $(date)"
-      - name: '安装依赖'
-        run: |
-          pip install --upgrade pip
-          pip install -r ./requirements.txt
-      - name: '准备Chrome驱动'
-        uses: nanasess/setup-chromedriver@v2
-      - name: '进行签到流程(账号组5)'
-        run: |
-          python ./jlc.py "${{ secrets.JLC_USERNAME_5 }}" "${{ secrets.JLC_PASSWORD_5 }}" "${{ secrets.ERROR_5 }}"
-
+          # 1. 读取环境变量中的原始数据
+          raw_data = os.environ.get('RAW_ACCOUNTS', '')
           
- # 第六个签到任务（账号组6）
-  running-6:
+          accounts = []
+          
+          # 2. 逐行清洗数据
+          for line in raw_data.split('\n'):
+              line = line.strip()
+              # 跳过空行、注释行(#开头)、以及不包含冒号的无效行
+              if not line or line.startswith('#') or ':' not in line:
+                  continue
+              
+              # 简单的分割账号和密码
+              try:
+                  # 假设格式为 username:password
+                  parts = line.split(':', 1)
+                  username = parts[0].strip()
+                  password = parts[1].strip()
+                  # 再次过滤掉无效数据
+                  if username and password:
+                      accounts.append((username, password))
+              except:
+                  continue
+
+          print(f"Total valid accounts found: {len(accounts)}")
+
+          # 3. 按50个一组进行切分
+          chunk_size = 50
+          chunks = []
+          total_chunks = math.ceil(len(accounts) / chunk_size)
+
+          for i in range(total_chunks):
+              batch = accounts[i*chunk_size : (i+1)*chunk_size]
+              # 将账号和密码分别用逗号连接 (适应 jlc.py 的参数格式)
+              users_str = ",".join([x[0] for x in batch])
+              pwds_str = ",".join([x[1] for x in batch])
+              
+              chunks.append({
+                  "index": i + 1,
+                  "users": users_str,
+                  "pwds": pwds_str
+              })
+
+          # 4. 输出 JSON 到 GitHub Outputs
+          matrix_json = json.dumps(chunks)
+          # 为了防止特殊字符问题，不直接打印，而是写入 $GITHUB_OUTPUT
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"matrix={matrix_json}\n")
+
+  # 任务2: 执行签到 (使用矩阵)
+  signin-process:
+    needs: generate-matrix
     runs-on: ubuntu-22.04
+    strategy:
+      max-parallel: 20       # 限制最大并发数为 20
+      fail-fast: false       # 某一组失败不影响其他组运行
+      matrix:
+        include: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
+
+    name: 账号组${{ matrix.index }} # 动态显示Job名称，如 "账号组1", "账号组2"
+
     steps:
       - name: '检出代码'
         uses: actions/checkout@v3
+
       - name: '设置Python环境'
         uses: actions/setup-python@v5
         with:
           python-version: 3.7
+
       - name: '设置时区为北京时间'
         run: |
           sudo timedatectl set-timezone Asia/Shanghai
           echo "当前时间: $(date)"
+
       - name: '安装依赖'
         run: |
           pip install --upgrade pip
-          pip install -r ./requirements.txt
+          if [ -f ./requirements.txt ]; then pip install -r ./requirements.txt; fi
+          # 额外安装可能需要的库
+          pip install selenium webdriver_manager requests
+
       - name: '准备Chrome驱动'
         uses: nanasess/setup-chromedriver@v2
-      - name: '进行签到流程(账号组6)'
-        run: |
-          python ./jlc.py "${{ secrets.JLC_USERNAME_6 }}" "${{ secrets.JLC_PASSWORD_6 }}" "${{ secrets.ERROR_6 }}"
 
-  
-  # 第七个签到任务（账号组7）
-  running-7:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: '检出代码'
-        uses: actions/checkout@v3
-      - name: '设置Python环境'
-        uses: actions/setup-python@v5
+      - name: '运行签到脚本'
+        run: |
+          # 调用 python 脚本，传入处理好的账号串、密码串、以及固定的 error=true
+          echo "正在运行第 ${{ matrix.index }} 组账号..."
+          python ./jlc.py "${{ matrix.users }}" "${{ matrix.pwds }}" "true"
+
+      - name: '上传密码修改记录'
+        # 即使脚本报错(比如部分账号失败)，也尝试上传产生的文件
+        if: always() 
+        uses: actions/upload-artifact@v4
         with:
-          python-version: 3.7
-      - name: '设置时区为北京时间'
-        run: |
-          sudo timedatectl set-timezone Asia/Shanghai
-          echo "当前时间: $(date)"
-      - name: '安装依赖'
-        run: |
-          pip install --upgrade pip
-          pip install -r ./requirements.txt
-      - name: '准备Chrome驱动'
-        uses: nanasess/setup-chromedriver@v2
-      - name: '进行签到流程(账号组7)'
-        run: |
-          python ./jlc.py "${{ secrets.JLC_USERNAME_7 }}" "${{ secrets.JLC_PASSWORD_7 }}" "${{ secrets.ERROR_7 }}"
-
-  # 第八个签到任务（账号组8）
-  running-8:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: '检出代码'
-        uses: actions/checkout@v3
-      - name: '设置Python环境'
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.7
-      - name: '设置时区为北京时间'
-        run: |
-          sudo timedatectl set-timezone Asia/Shanghai
-          echo "当前时间: $(date)"
-      - name: '安装依赖'
-        run: |
-          pip install --upgrade pip
-          pip install -r ./requirements.txt
-      - name: '准备Chrome驱动'
-        uses: nanasess/setup-chromedriver@v2
-      - name: '进行签到流程(账号组8)'
-        run: |
-          python ./jlc.py "${{ secrets.JLC_USERNAME_8 }}" "${{ secrets.JLC_PASSWORD_8 }}" "${{ secrets.ERROR_8 }}"
-
-    # 第九个签到任务（账号组9）
-  running-9:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: '检出代码'
-        uses: actions/checkout@v3
-      - name: '设置Python环境'
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.7
-      - name: '设置时区为北京时间'
-        run: |
-          sudo timedatectl set-timezone Asia/Shanghai
-          echo "当前时间: $(date)"
-      - name: '安装依赖'
-        run: |
-          pip install --upgrade pip
-          pip install -r ./requirements.txt
-      - name: '准备Chrome驱动'
-        uses: nanasess/setup-chromedriver@v2
-      - name: '进行签到流程(账号组9)'
-        run: |
-          python ./jlc.py "${{ secrets.JLC_USERNAME_9 }}" "${{ secrets.JLC_PASSWORD_9 }}" "${{ secrets.ERROR_9 }}"
-
+          name: password-changed-group-${{ matrix.index }}
+          path: |
+            password-changed.txt
+            logs/*.log
+          if-no-files-found: ignore
+          retention-days: 7
