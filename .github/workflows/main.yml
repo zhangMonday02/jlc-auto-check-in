@@ -124,7 +124,6 @@ jobs:
 
       - name: '运行签到脚本'
         run: |
-          # 调用 python 脚本，传入处理好的账号串、密码串、以及固定的 error=true
           echo "正在运行第 ${{ matrix.index }} 组账号..."
           python ./jlc.py "${{ matrix.users }}" "${{ matrix.pwds }}" "true"
 
