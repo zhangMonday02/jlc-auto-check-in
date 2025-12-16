@@ -537,7 +537,7 @@ def ensure_login_page(driver, account_index):
         driver.get("https://oshwhub.com/sign_in")
         log(f"账号 {account_index} - 已打开 JLC 签到页")
         
-        WebDriverWait(driver, 15).until(lambda d: "passport.jlc.com/login" in d.current_url)
+        WebDriverWait(driver, 30).until(lambda d: "passport.jlc.com/login" in d.current_url)
         current_url = driver.current_url
 
         # 检查是否在登录页面
