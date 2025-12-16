@@ -541,7 +541,7 @@ def ensure_login_page(driver, account_index):
             driver.get("https://oshwhub.com/sign_in")
             log(f"账号 {account_index} - 已打开 JLC 签到页")
             
-            WebDriverWait(driver, 10).until(lambda d: "passport.jlc.com/login" in d.current_url)
+            WebDriverWait(driver, 15).until(lambda d: "passport.jlc.com/login" in d.current_url)
             current_url = driver.current_url
 
             # 检查是否在登录页面
@@ -550,66 +550,12 @@ def ensure_login_page(driver, account_index):
                 return True
             else:
                 restarts += 1
-                if restarts < max_restarts:
-                    # 静默重启浏览器
-                    driver.quit()
-                    
-                    # 重新初始化浏览器
-                    chrome_options = Options()
-                    chrome_options.add_argument("--headless=new")
-                    chrome_options.add_argument("--no-sandbox")
-                    chrome_options.add_argument("--disable-dev-shm-usage")
-                    chrome_options.add_argument("--disable-gpu")
-                    chrome_options.add_argument("--window-size=1920,1080")
-                    chrome_options.add_argument(f"--user-data-dir={tempfile.mkdtemp()}")
-                    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-                    chrome_options.add_argument("--blink-settings=imagesEnabled=false")
-                    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-                    chrome_options.add_experimental_option('useAutomationExtension', False)
-
-                    caps = DesiredCapabilities.CHROME
-                    caps['goog:loggingPrefs'] = {'performance': 'ALL'}
-                    
-                    driver = webdriver.Chrome(options=chrome_options, desired_capabilities=caps)
-                    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-                    
-                    # 静默等待后继续循环
-                    time.sleep(2)
-                else:
-                    log(f"账号 {account_index} - ❌ 重启浏览器{max_restarts}次后仍无法进入登录页面")
-                    return False
+                time.sleep(2)
                     
         except Exception as e:
             restarts += 1
-            if restarts < max_restarts:
-                try:
-                    driver.quit()
-                except:
-                    pass
-                
-                # 重新初始化浏览器
-                chrome_options = Options()
-                chrome_options.add_argument("--headless=new")
-                chrome_options.add_argument("--no-sandbox")
-                chrome_options.add_argument("--disable-dev-shm-usage")
-                chrome_options.add_argument("--disable-gpu")
-                chrome_options.add_argument("--window-size=1920,1080")
-                chrome_options.add_argument(f"--user-data-dir={tempfile.mkdtemp()}")
-                chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-                chrome_options.add_argument("--blink-settings=imagesEnabled=false")
-                chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-                chrome_options.add_experimental_option('useAutomationExtension', False)
-
-                caps = DesiredCapabilities.CHROME
-                caps['goog:loggingPrefs'] = {'performance': 'ALL'}
-                
-                driver = webdriver.Chrome(options=chrome_options, desired_capabilities=caps)
-                driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-                
-                time.sleep(2)
-            else:
-                log(f"账号 {account_index} - ❌ 重启浏览器{max_restarts}次后仍出现异常: {e}")
-                return False
+            log(f"账号 {account_index} - 尝试进入登录页异常: {e}")
+            time.sleep(2)
     
     return False
 
@@ -668,12 +614,16 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
     chrome_options.add_argument("--blink-settings=imagesEnabled=false")  # 禁用图像加载
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
+    chrome_options.page_load_strategy = 'eager'
 
     caps = DesiredCapabilities.CHROME
     caps['goog:loggingPrefs'] = {'performance': 'ALL'}
     
     driver = webdriver.Chrome(options=chrome_options, desired_capabilities=caps)
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    
+    driver.set_page_load_timeout(30)
+    driver.set_script_timeout(30)
     
     wait = WebDriverWait(driver, 25)
     
