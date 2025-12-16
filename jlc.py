@@ -532,32 +532,25 @@ def get_user_nickname_from_api(driver, account_index):
         return None
 
 def ensure_login_page(driver, account_index):
-    """确保进入登录页面，如果未检测到登录页面则重启浏览器"""
-    max_restarts = 5
-    restarts = 0
-    
-    while restarts < max_restarts:
-        try:
-            driver.get("https://oshwhub.com/sign_in")
-            log(f"账号 {account_index} - 已打开 JLC 签到页")
-            
-            WebDriverWait(driver, 15).until(lambda d: "passport.jlc.com/login" in d.current_url)
-            current_url = driver.current_url
+    """确保进入登录页面，如果未检测到登录页面则返回False"""
+    try:
+        driver.get("https://oshwhub.com/sign_in")
+        log(f"账号 {account_index} - 已打开 JLC 签到页")
+        
+        WebDriverWait(driver, 15).until(lambda d: "passport.jlc.com/login" in d.current_url)
+        current_url = driver.current_url
 
-            # 检查是否在登录页面
-            if "passport.jlc.com/login" in current_url:
-                log(f"账号 {account_index} - ✅ 检测到未登录状态")
-                return True
-            else:
-                restarts += 1
-                time.sleep(2)
-                    
-        except Exception as e:
-            restarts += 1
-            log(f"账号 {account_index} - 尝试进入登录页异常: {e}")
-            time.sleep(2)
-    
-    return False
+        # 检查是否在登录页面
+        if "passport.jlc.com/login" in current_url:
+            log(f"账号 {account_index} - ✅ 检测到未登录状态")
+            return True
+        else:
+            log(f"账号 {account_index} - ❌ 未能进入登录页面，当前URL: {current_url}")
+            return False
+                
+    except Exception as e:
+        log(f"账号 {account_index} - ❌ 进入登录页面异常: {e}")
+        return False
 
 def check_password_error(driver, account_index):
     """检查页面是否显示密码错误提示"""
@@ -622,9 +615,9 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
     driver = webdriver.Chrome(options=chrome_options, desired_capabilities=caps)
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
     
-    driver.set_page_load_timeout(30)
-    driver.set_script_timeout(30)
-    
+    driver.set_page_load_timeout(20)
+    driver.set_script_timeout(20)
+
     wait = WebDriverWait(driver, 25)
     
     # 记录详细结果
