@@ -641,7 +641,7 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
         'retry_count': retry_count,
         'is_final_retry': is_final_retry,
         'password_error': False,  #标记密码错误
-        'retry_from_backup_index': -1,  # 如果需要重试，从哪个备用密码索引继续，-1表示原密码
+        'retry_from_backup_index': start_backup_index,  # 默认使用传入的索引，确保如果非密码错误退出时，下次保持该密码
         'actual_password': None,  # 实际使用的密码
         'backup_index': -1  # 使用的备用密码索引，-1表示原密码
     }
@@ -1144,70 +1144,90 @@ def execute_final_retry_for_failed_accounts(all_results, usernames, passwords, t
     for failed_acc in failed_accounts:
         log(f"🔄 开始最终重试账号 {failed_acc['account_index']}")
         
-        # 执行最终重试（只执行一次），retry_count 设置为之前的 +1，但不超过3+1
-        final_result = sign_in_account(
-            failed_acc['username'], 
-            failed_acc['password'], 
-            failed_acc['account_index'], 
-            total_accounts, 
-            retry_count=failed_acc['previous_retry_count'] + 1,
-            is_final_retry=True,
-            start_backup_index=failed_acc['start_backup_index']
-        )
+        current_backup_index = failed_acc['start_backup_index']
+        max_final_retries = 3
         
-        # 如果最终重试检测到密码错误，标记但不更新其他状态
-        if final_result.get('password_error'):
+        # 在最终重试阶段，允许最多尝试3次
+        for final_attempt in range(max_final_retries):
+            retry_suffix = f" (最终重试 {final_attempt + 1}/{max_final_retries})"
+            
+            final_result = sign_in_account(
+                failed_acc['username'], 
+                failed_acc['password'], 
+                failed_acc['account_index'], 
+                total_accounts, 
+                retry_count=failed_acc['previous_retry_count'] + 1 + final_attempt,
+                is_final_retry=True,
+                start_backup_index=current_backup_index
+            )
+            
+            # 更新下一次循环可能用到的索引
+            if 'retry_from_backup_index' in final_result and final_result['retry_from_backup_index'] >= -1:
+                current_backup_index = final_result['retry_from_backup_index']
+            
             original_result = all_results[failed_acc['index']]
-            original_result['password_error'] = True
-            original_result['oshwhub_status'] = final_result['oshwhub_status']
-            original_result['nickname'] = '未知'
-            original_result['is_final_retry'] = True
-            original_result['retry_count'] = failed_acc['previous_retry_count'] + 1
-            log(f"账号 {failed_acc['account_index']} - ❌ 最终重试检测到所有密码错误")
-            continue
-        
-        original_result = all_results[failed_acc['index']]
-        
-        # 更新开源平台结果
-        if final_result['oshwhub_success'] and not original_result['oshwhub_success']:
-            original_result['oshwhub_success'] = True
-            original_result['oshwhub_status'] = final_result['oshwhub_status']
-            original_result['initial_points'] = final_result['initial_points']
-            original_result['final_points'] = final_result['final_points']
-            original_result['points_reward'] = final_result['points_reward']
-            original_result['reward_results'] = final_result['reward_results']
-            # 更新实际密码信息
-            original_result['actual_password'] = final_result['actual_password']
-            original_result['backup_index'] = final_result['backup_index']
-            log(f"✅ 账号 {failed_acc['account_index']} - 开源平台签到成功")
-        
-        # 更新金豆结果
-        if final_result['jindou_success'] and not original_result['jindou_success']:
-            original_result['jindou_success'] = True
-            original_result['jindou_status'] = final_result['jindou_status']
-            original_result['initial_jindou'] = final_result['initial_jindou']
-            original_result['final_jindou'] = final_result['final_jindou']
-            original_result['jindou_reward'] = final_result['jindou_reward']
-            original_result['has_jindou_reward'] = final_result['has_jindou_reward']
-            # 更新实际密码信息（如果之前未更新）
-            if original_result['actual_password'] is None:
+            
+            # 如果最终重试检测到密码错误，标记并直接跳出该账号的重试
+            if final_result.get('password_error'):
+                original_result['password_error'] = True
+                original_result['oshwhub_status'] = final_result['oshwhub_status']
+                original_result['nickname'] = '未知'
+                original_result['is_final_retry'] = True
+                original_result['retry_count'] = failed_acc['previous_retry_count'] + 1 + final_attempt
+                log(f"账号 {failed_acc['account_index']} - ❌ 最终重试{retry_suffix}检测到所有密码错误，停止重试")
+                break
+            
+            # 更新开源平台结果
+            if final_result['oshwhub_success'] and not original_result['oshwhub_success']:
+                original_result['oshwhub_success'] = True
+                original_result['oshwhub_status'] = final_result['oshwhub_status']
+                original_result['initial_points'] = final_result['initial_points']
+                original_result['final_points'] = final_result['final_points']
+                original_result['points_reward'] = final_result['points_reward']
+                original_result['reward_results'] = final_result['reward_results']
+                # 更新实际密码信息
                 original_result['actual_password'] = final_result['actual_password']
                 original_result['backup_index'] = final_result['backup_index']
-            log(f"✅ 账号 {failed_acc['account_index']} - 金豆签到成功")
-        
-        # 更新其他信息
-        if original_result['nickname'] == '未知' and final_result['nickname'] != '未知':
-            original_result['nickname'] = final_result['nickname']
-        
-        if not original_result['token_extracted'] and final_result['token_extracted']:
-            original_result['token_extracted'] = final_result['token_extracted']
-        
-        if not original_result['secretkey_extracted'] and final_result['secretkey_extracted']:
-            original_result['secretkey_extracted'] = final_result['secretkey_extracted']
-        
-        original_result['is_final_retry'] = True
-        original_result['retry_count'] = failed_acc['previous_retry_count'] + 1
-        original_result['retry_from_backup_index'] = final_result.get('retry_from_backup_index', -1)
+                log(f"✅ 账号 {failed_acc['account_index']} - 开源平台签到成功{retry_suffix}")
+            
+            # 更新金豆结果
+            if final_result['jindou_success'] and not original_result['jindou_success']:
+                original_result['jindou_success'] = True
+                original_result['jindou_status'] = final_result['jindou_status']
+                original_result['initial_jindou'] = final_result['initial_jindou']
+                original_result['final_jindou'] = final_result['final_jindou']
+                original_result['jindou_reward'] = final_result['jindou_reward']
+                original_result['has_jindou_reward'] = final_result['has_jindou_reward']
+                # 更新实际密码信息（如果之前未更新）
+                if original_result['actual_password'] is None:
+                    original_result['actual_password'] = final_result['actual_password']
+                    original_result['backup_index'] = final_result['backup_index']
+                log(f"✅ 账号 {failed_acc['account_index']} - 金豆签到成功{retry_suffix}")
+            
+            # 更新其他信息
+            if original_result['nickname'] == '未知' and final_result['nickname'] != '未知':
+                original_result['nickname'] = final_result['nickname']
+            
+            if not original_result['token_extracted'] and final_result['token_extracted']:
+                original_result['token_extracted'] = final_result['token_extracted']
+            
+            if not original_result['secretkey_extracted'] and final_result['secretkey_extracted']:
+                original_result['secretkey_extracted'] = final_result['secretkey_extracted']
+            
+            original_result['is_final_retry'] = True
+            original_result['retry_count'] = failed_acc['previous_retry_count'] + 1 + final_attempt
+            original_result['retry_from_backup_index'] = current_backup_index
+            
+            # 如果已经全部成功，提前结束该账号的重试
+            if original_result['oshwhub_success'] and original_result['jindou_success']:
+                log(f"✅ 账号 {failed_acc['account_index']} - 在最终重试中全部成功，结束重试")
+                break
+            
+            # 如果不是最后一次尝试，等待一小会儿
+            if final_attempt < max_final_retries - 1:
+                sleep_sec = random.randint(3, 5)
+                log(f"⏳ 账号 {failed_acc['account_index']} - 等待 {sleep_sec} 秒后进行下一次最终重试...")
+                time.sleep(sleep_sec)
         
         # 如果不是最后一个账号，等待一段时间
         if failed_acc != failed_accounts[-1]:
