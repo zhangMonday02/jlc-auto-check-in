@@ -13,6 +13,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 
 # 全局变量用于收集总结日志
 in_summary = False
@@ -241,7 +242,11 @@ class JLCClient:
             # 重试前刷新页面，重新提取 token 和 secretkey
             if attempt < max_retries - 1:
                 try:
-                    self.driver.get("https://m.jlc.com/")
+                    try:
+                        self.driver.get("https://m.jlc.com/")
+                    except TimeoutException:
+                        self.driver.execute_script("window.stop();")
+                    
                     self.driver.refresh()
                     WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
                     time.sleep(1 + random.uniform(0, 1))
@@ -534,7 +539,14 @@ def get_user_nickname_from_api(driver, account_index):
 def ensure_login_page(driver, account_index):
     """确保进入登录页面，如果未检测到登录页面则返回False"""
     try:
-        driver.get("https://oshwhub.com/sign_in")
+        try:
+            driver.get("https://oshwhub.com/sign_in")
+        except TimeoutException:
+            log(f"账号 {account_index} - 页面加载超时(30s)，强制停止加载并继续...")
+            try:
+                driver.execute_script("window.stop();")
+            except:
+                pass
         log(f"账号 {account_index} - 已打开 JLC 签到页")
         
         WebDriverWait(driver, 60).until(lambda d: "passport.jlc.com/login" in d.current_url)
@@ -607,7 +619,6 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
     chrome_options.add_argument("--blink-settings=imagesEnabled=false")  # 禁用图像加载
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
-    chrome_options.page_load_strategy = 'eager'
 
     caps = DesiredCapabilities.CHROME
     caps['goog:loggingPrefs'] = {'performance': 'ALL'}
@@ -615,10 +626,10 @@ def sign_in_account(username, password, account_index, total_accounts, retry_cou
     driver = webdriver.Chrome(options=chrome_options, desired_capabilities=caps)
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
     
-    driver.set_page_load_timeout(20)
-    driver.set_script_timeout(20)
+    driver.set_page_load_timeout(30)
+    driver.set_script_timeout(30)
 
-    wait = WebDriverWait(driver, 25)
+    wait = WebDriverWait(driver, 30)
     
     # 记录详细结果
     result = {
