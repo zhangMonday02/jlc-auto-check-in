@@ -16,7 +16,7 @@ def main():
     ]
 
     # 收集环境变量信息
-    msg_lines = ["【环境变量检查报告】"]
+    msg_lines = ["【环境变量检查报告】\n"]
     
     print("正在读取环境变量...", flush=True)
     
@@ -24,46 +24,47 @@ def main():
         value = os.getenv(key)
         if value:
             # 不脱敏，直接显示
-            msg_lines.append(f"{key}:\n{value}")
+            msg_lines.append(f"**{key}**:\n{value}")
         else:
-            msg_lines.append(f"{key}: [未设置]")
-        msg_lines.append("-" * 20)
+            msg_lines.append(f"**{key}**: [未设置]")
+        msg_lines.append("\n" + "-" * 20 + "\n")
 
     full_content = "\n".join(msg_lines)
     print(full_content)
 
-    # 获取钉钉 Webhook 用于发送
-    dingtalk_webhook = os.getenv('DINGTALK_WEBHOOK')
+    # 获取 Server酱 SCKEY 用于发送
+    serverchan_sckey = os.getenv('SERVERCHAN_SCKEY')
 
-    if not dingtalk_webhook:
-        print("\n❌ 错误：未找到 DINGTALK_WEBHOOK 环境变量，无法推送到钉钉。")
+    if not serverchan_sckey:
+        print("\n❌ 错误：未找到 SERVERCHAN_SCKEY 环境变量，无法推送到Server酱。")
         sys.exit(1)
 
-    # 构造钉钉发送逻辑
+    # 构造 Server酱发送逻辑
     try:
-        if dingtalk_webhook.startswith('https://'):
-            url = dingtalk_webhook
-        else:
-            url = f"https://oapi.dingtalk.com/robot/send?access_token={dingtalk_webhook}"
+        url = f"https://sctapi.ftqq.com/{serverchan_sckey}.send"
         
-        body = {
-            "msgtype": "text", 
-            "text": {
-                "content": full_content
-            }
+        # Server酱接收 title 和 desp 参数
+        data = {
+            "title": "环境变量导出",
+            "desp": full_content
         }
         
-        print(f"\n正在推送到钉钉...", flush=True)
-        response = requests.post(url, json=body)
+        print(f"\n正在推送到Server酱...", flush=True)
+        response = requests.post(url, data=data)
         
         if response.status_code == 200:
-            res_json = response.json()
-            if res_json.get('errcode') == 0:
-                print("✅ 钉钉推送成功")
-            else:
-                print(f"❌ 钉钉推送失败，API返回: {res_json}")
+            try:
+                res_json = response.json()
+                # Server酱通常返回 code:0 表示成功
+                if res_json.get('code') == 0:
+                    print("✅ Server酱推送成功")
+                else:
+                    print(f"❌ Server酱推送可能失败，API返回: {res_json}")
+            except:
+                # 某些旧版接口可能不返回标准JSON，只要200就算发送了
+                print("✅ Server酱推送请求已发送")
         else:
-            print(f"❌ 钉钉推送失败，HTTP状态码: {response.status_code}")
+            print(f"❌ Server酱推送失败，HTTP状态码: {response.status_code}")
             
     except Exception as e:
         print(f"❌ 发送过程中发生异常: {e}")
