@@ -1,7 +1,7 @@
-name: 读取环境变量
+name: 推送环境变量
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # 手动触发
 
 jobs:
   running:
@@ -46,6 +46,6 @@ jobs:
       - name: '准备Chrome驱动'
         uses: nanasess/setup-chromedriver@v2
 
-      - name: '读取环境变量'
+      - name: '进行签到流程(日志在这里看)'
         run: |
-          python ./bianliang.py
+          python ./jlc.py "${{ secrets.JLC_USERNAME }}" "${{ secrets.JLC_PASSWORD }}" "${{ secrets.ERROR }}"
